@@ -14,10 +14,9 @@
  * bubble (a task/habit suggestion, or the sleeping/empty text -- the bubble
  * itself never shows a BLE notification; those stay on the dedicated Alerts
  * screen), with today's Logs (completed tasks/habits) always shown
- * underneath. A three-line glance strip sits right under the header -- the
- * next Google Calendar event, the YNAB "Wants" balance, and the newest BLE
- * alert (see glanceNextEvent()/glanceBudgetWants()/glanceNewestAlert()), each
- * led by that app's own icon
+ * underneath. A two-line glance strip sits right under the header -- the
+ * next Google Calendar event and the newest BLE alert (see
+ * glanceNextEvent()/glanceNewestAlert()), each led by that app's own icon
  * instead of a text label -- purely informational: it neither joins the
  * Left1/Left2 loop below nor sits inside either focus highlight described
  * there. No tabs, no Tasks/Habits browsing here -- those live in their own
@@ -171,11 +170,10 @@ class QuickPickActivity final : public Activity {
   // Draws the Logs row list below the companion figure/bubble.
   void renderLogsTab(int top, int height) const;
 
-  // The three-line glance strip (see this file's own header comment). Each
+  // The two-line glance strip (see this file's own header comment). Each
   // returns the exact line to draw, empty/not-synced text included -- render()
   // never needs to check hasSynced()/getCount() itself.
   std::string glanceNextEvent() const;
-  std::string glanceBudgetWants() const;
   std::string glanceNewestAlert() const;
 
   std::string pickedText;

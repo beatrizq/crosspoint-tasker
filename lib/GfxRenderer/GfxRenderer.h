@@ -180,6 +180,13 @@ class GfxRenderer {
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   // void displayWindow(int x, int y, int width, int height) const;
   void invertScreen() const;
+  // Same bit-flip as invertScreen(), scoped to one screen-coordinate
+  // rectangle -- for a "selected" look on already-drawn content (e.g. a
+  // theme's own header) without knowing or redrawing what's underneath.
+  // Rect is snapped outward to the same 8-pixel byte alignment
+  // readFramebufferRegion/writeFramebufferRegion use, so it can invert a few
+  // pixels more than asked at the edges, never fewer.
+  void invertRect(int x, int y, int w, int h) const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
 

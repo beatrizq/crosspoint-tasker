@@ -6,10 +6,8 @@
 #include <HabitifyHabitCache.h>
 #include <I18n.h>
 #include <TodoistTaskCache.h>
-#include <YnabCategoryCache.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -27,7 +25,6 @@
 #include "companion/QuickPickRoll.h"
 #include "components/UITheme.h"
 #include "components/icons/bell24.h"
-#include "components/icons/budget24.h"
 #include "components/icons/calendar24.h"
 #include "fontIds.h"
 #include "util/HomeAppOrder.h"
@@ -75,9 +72,9 @@ constexpr int SELECTION_BOX_CORNER_RADIUS = 6;
 // Inset from the box's own content on every side.
 constexpr int SELECTION_BOX_PADDING = 10;
 
-// Gap between the glance strip's own three lines, and between the strip and
+// Gap between the glance strip's own two lines, and between the strip and
 // the bubble below it. Tighter than LABEL_GAP (used below the sprite, where
-// the Logs list needs a real section break) -- these three lines are dense
+// the Logs list needs a real section break) -- these two lines are dense
 // glance info, not a section boundary of their own.
 constexpr int GLANCE_LINE_GAP = 4;
 constexpr int GLANCE_STRIP_GAP = 10;
@@ -85,20 +82,15 @@ constexpr int GLANCE_STRIP_GAP = 10;
 constexpr int GLANCE_ICON_SIZE = 24;
 constexpr int GLANCE_ICON_GAP = 8;
 
-// Case-insensitive full-string match, for finding the YNAB category literally
-// named "Wants" among the user's own (freeform) category names -- the
-// existing isYnabInflowCategory() (YnabCategory.h) only checks a prefix,
-// which is right for its own job (matching every numbered "Inflow: ..."
-// category) but wrong for an exact name like this one.
-bool equalsIgnoreCase(const std::string& a, const std::string& b) {
-  if (a.size() != b.size()) return false;
-  for (size_t i = 0; i < a.size(); i++) {
-    if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i]))) {
-      return false;
-    }
-  }
-  return true;
-}
+// How much of the header's own vertical space this screen's own layout
+// treats as occupied, now that the header shows only a theme's
+// clock/date/battery combo (see render()'s own comment) rather than the
+// full title+subtitle metrics.headerHeight was sized for. Generous enough
+// for a single small-font line plus the battery icon with a little
+// breathing room on every theme that draws anything into a null-title
+// header at all (see render()'s own comment on RoundedRaffTheme, which
+// draws nothing there regardless, making this value moot for it).
+constexpr int HEADER_CONTENT_HEIGHT = 28;
 
 // Same bounds HabitsActivity's own number entry uses -- see its own comment
 // for why 50/1/5.
@@ -134,6 +126,18 @@ void mirrorToAppState(const std::string& text, const std::string& itemId, const 
 void QuickPickActivity::onEnter() {
   Activity::onEnter();
   mirrorToAppState(pickedText, itemId, isHabit, poolEmpty);
+  // Re-reads the glance strip's own Calendar source from disk, the same
+  // "hydrate on entry" OrganizerScreenActivity::onEnter() -> loadCaches()
+  // already does for Calendar (CalendarActivity's own loadCaches()
+  // override) -- QuickPickActivity extends Activity directly, so it never
+  // gets that hook. Without this, Sync All's own reboot (see
+  // SyncAllActivity::onExit(), which fires whenever WiFi was activated,
+  // i.e. on every real sync) starts GCAL_EVENTS fresh from its constructor,
+  // and this screen would otherwise read it exactly as it was before that
+  // sync (hasSynced() == false, if this is a first sync) until something
+  // else -- Calendar's own onEnter() -- happened to load it first. A no-op
+  // (returns false, changes nothing) when the file doesn't exist yet.
+  GCAL_EVENTS.loadFromFile();
   // One I2C read to resolve the calendar day, so currentMood() is cheap from
   // the render path -- same reasoning as HomeActivity::onEnter()'s own call.
   // Needed here specifically because this screen can be reached directly
@@ -783,20 +787,6 @@ std::string QuickPickActivity::glanceNextEvent() const {
   return std::string(tr(STR_GCAL_NO_EVENTS));
 }
 
-std::string QuickPickActivity::glanceBudgetWants() const {
-  // No text label here -- the budget icon next to this line is the label
-  // (see render()'s own glance-strip drawing).
-  if (!YNAB_CATEGORIES.hasSynced()) {
-    return std::string(tr(STR_YNAB_NEVER_SYNCED));
-  }
-  for (const auto& category : YNAB_CATEGORIES.getCategories()) {
-    if (equalsIgnoreCase(category.name, "Wants")) {
-      return category.balance;
-    }
-  }
-  return std::string(tr(STR_COMPANION_GLANCE_NO_WANTS));
-}
-
 std::string QuickPickActivity::glanceNewestAlert() const {
   // No text label here -- the bell icon next to this line is the label (see
   // render()'s own glance-strip drawing).
@@ -840,22 +830,29 @@ void QuickPickActivity::render(RenderLock&&) {
   // drawHeader() returns immediately on a null title, so on that theme this
   // whole header band goes blank (battery included) rather than losing just
   // the title/subtitle -- not something this screen can route around
-  // without a theme-level change.
+  // without a theme-level change. metrics.headerHeight itself is sized for
+  // a full title+subtitle header this screen no longer draws, so it is
+  // still passed to drawHeader() (its own contract, and title/subtitle draw
+  // at fixed offsets from rect.y regardless of rect.height anyway), but
+  // HEADER_CONTENT_HEIGHT -- not metrics.headerHeight -- is what this
+  // screen's own layout below actually uses, so the glance strip sits right
+  // under the clock/battery row instead of leaving the empty space
+  // metrics.headerHeight otherwise reserved for the title this row no
+  // longer has.
   const int headerTop = metrics.topPadding;
   const Rect headerRect{0, headerTop, pageWidth, metrics.headerHeight};
   GUI.drawHeader(renderer, headerRect, /*title=*/nullptr, /*subtitle=*/nullptr, /*showRule=*/true);
 
-  // Hovering the header (see this file's own header comment): drawn
-  // inverted -- a straight black fill on top of whatever the active theme
-  // just drew above (on Lyra, its own clock/date/battery, simply covered
-  // while focused) -- rather than asking the theme for an inverted variant.
-  // This screen already owns its other focus highlights directly (see
-  // SELECTION_BOX_LINE_WIDTH's own comment), and duplicating any one
-  // theme's own header layout here would both cross that boundary and only
-  // look right on whichever theme happens to be active. Nothing of this
-  // screen's own to redraw on top -- there's no title/subtitle left to show.
+  // Hovering the header (see this file's own header comment): a true pixel
+  // invert (GfxRenderer::invertRect(), the same bit-flip invertScreen() does,
+  // scoped to this rect) rather than a fillRect() -- fillRect would just
+  // paint over the clock/date/battery LyraTheme already drew, hiding it
+  // instead of turning it white the way an opaque fill can't without also
+  // redrawing (and thus duplicating) that theme's own content. Scoped to
+  // HEADER_CONTENT_HEIGHT, not the full header rect, so only the actual
+  // clock/battery row inverts, not the empty space below it.
   if (focus == Focus::Header) {
-    renderer.fillRect(headerRect.x, headerRect.y, headerRect.width, headerRect.height);
+    renderer.invertRect(headerRect.x, headerRect.y, headerRect.width, HEADER_CONTENT_HEIGHT);
   }
 
   // The glance strip (see this file's own header comment) sits right under
@@ -863,23 +860,25 @@ void QuickPickActivity::render(RenderLock&&) {
   // Left1/Left2 loop below nor sits inside either focus highlight), but
   // contentTop (defined after it) is what the companion figure/bubble and
   // its own focus box are actually positioned from. Each line is led by
-  // that app's own icon (Calendar/Budget/Bell) instead of a text label --
+  // that app's own icon (Calendar/Bell) instead of a text label --
   // GLANCE_ICON_SIZE (24px) is a size no theme's icon set already had (only
-  // 32px/80px assets existed for these three), generated via
+  // 32px/80px assets existed for these two), generated via
   // scripts/convert_icon.py from the existing larger bitmaps rather than
   // original source art, since the pixel data is all this needed.
-  const std::string glanceLines[3] = {glanceNextEvent(), glanceBudgetWants(), glanceNewestAlert()};
-  static const uint8_t* const GLANCE_ICONS[3] = {Calendar24Icon, Budget24Icon, Bell24Icon};
+  constexpr int GLANCE_ROW_COUNT = 2;
+  const std::string glanceLines[GLANCE_ROW_COUNT] = {glanceNextEvent(), glanceNewestAlert()};
+  static const uint8_t* const GLANCE_ICONS[GLANCE_ROW_COUNT] = {Calendar24Icon, Bell24Icon};
   const int glanceLineH = renderer.getLineHeight(UI_10_FONT_ID);
   const int glanceRowH = std::max(glanceLineH, GLANCE_ICON_SIZE);
-  const int glanceStripTop = headerTop + metrics.headerHeight;
-  const int glanceStripHeight = glanceRowH * 3 + GLANCE_LINE_GAP * 2 + GLANCE_STRIP_GAP;
+  const int glanceStripTop = headerTop + HEADER_CONTENT_HEIGHT;
+  const int glanceStripHeight =
+      glanceRowH * GLANCE_ROW_COUNT + GLANCE_LINE_GAP * (GLANCE_ROW_COUNT - 1) + GLANCE_STRIP_GAP;
   {
     const int iconX = metrics.contentSidePadding;
     const int textX = iconX + GLANCE_ICON_SIZE + GLANCE_ICON_GAP;
     const int glanceMaxWidth = pageWidth - metrics.contentSidePadding * 2 - GLANCE_ICON_SIZE - GLANCE_ICON_GAP;
     int rowY = glanceStripTop;
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < GLANCE_ROW_COUNT; i++) {
       renderer.drawIcon(GLANCE_ICONS[i], iconX, rowY, GLANCE_ICON_SIZE);
       const std::string truncated = renderer.truncatedText(UI_10_FONT_ID, glanceLines[i].c_str(), glanceMaxWidth);
       renderer.drawText(UI_10_FONT_ID, textX, rowY + (glanceRowH - glanceLineH) / 2, truncated.c_str());

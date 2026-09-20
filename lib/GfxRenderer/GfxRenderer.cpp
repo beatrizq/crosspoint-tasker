@@ -1537,6 +1537,17 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
+void GfxRenderer::invertRect(const int x, const int y, const int w, const int h) const {
+  const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
+  if (!mem.valid) return;
+
+  const size_t rowBytes = mem.w / 8;  // exact: mem.w is a multiple of 8
+  for (uint16_t row = 0; row < mem.h; ++row) {
+    uint8_t* rowPtr = frameBuffer + (static_cast<uint32_t>(mem.y + row) * panelWidthBytes) + (mem.x / 8);
+    for (size_t b = 0; b < rowBytes; ++b) rowPtr[b] = ~rowPtr[b];
+  }
+}
+
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
