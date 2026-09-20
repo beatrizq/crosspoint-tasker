@@ -173,7 +173,9 @@ class QuickPickActivity final : public Activity {
   // The two-line glance strip (see this file's own header comment). Each
   // returns the exact line to draw, empty/not-synced text included -- render()
   // never needs to check hasSynced()/getCount() itself.
-  std::string glanceNextEvent() const;
+  // outWhen receives the trailing date/time part (empty for the fallback
+  // texts) -- render() draws it dimmed, separately from the returned text.
+  std::string glanceNextEvent(std::string& outWhen) const;
   std::string glanceNewestAlert() const;
 
   std::string pickedText;

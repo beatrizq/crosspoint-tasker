@@ -58,6 +58,33 @@ constexpr int mainMenuIconSize = 32;
 constexpr int homeGridIconSize = 80;
 constexpr int listIconSize = 24;
 constexpr int mainMenuColumns = 2;
+// The header clock's own icon, same size as a list row's own icon
+// (listIconSize) -- QuickPickActivity's glance strip icons match this size
+// too, and the clock is meant to read as the same family of icon+text rows.
+constexpr int headerClockIconSize = listIconSize;
+constexpr int headerClockIconGap = 6;
+// Battery icon to match this row's own bigger text (see the header clock's
+// own comment) -- not LyraMetrics::values.battery*, which stays this
+// theme's smaller, general-purpose default for whatever else might use it.
+// Same 4:3-ish proportions as that default, scaled up.
+constexpr int headerBatteryWidth = 22;
+constexpr int headerBatteryHeight = 16;
+
+// A small clock face -- circle (outline) + hour/minute hands -- drawn from
+// plain line/rounded-rect primitives rather than a bitmap: there's no
+// drawCircle on GfxRenderer, but a fixed-radius rounded square at this size
+// reads as a circle, and a vector icon stays crisp at a size nothing in this
+// theme's own icon set was generated at. A 2px line (not the default 1px)
+// so it actually reads at a glance instead of near-vanishing against the
+// icon+text rows around it.
+void drawClockIcon(const GfxRenderer& renderer, const int x, const int y, const int size) {
+  constexpr int lineWidth = 2;
+  renderer.drawRoundedRect(x, y, size, size, lineWidth, size / 2, true);
+  const int centreX = x + size / 2;
+  const int centreY = y + size / 2;
+  renderer.drawLine(centreX, centreY, centreX, centreY - size / 2 + 2, lineWidth, true);
+  renderer.drawLine(centreX, centreY, centreX + size / 4, centreY, lineWidth, true);
+}
 int coverWidth = 0;
 
 const uint8_t* iconForName(UIIcon icon, int size) {
@@ -154,22 +181,38 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                            const bool showRule) const {
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
 
+  // Drawn directly (not via drawBatteryRight(), which hardcodes SMALL_FONT_ID
+  // for its own percentage text) so the percentage matches this row's own
+  // bigger UI_10_FONT_ID, the same reasoning the clock text below already
+  // gets -- and the icon itself is sized up to match (headerBatteryWidth/
+  // Height, see its own comment).
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  // Position icon at right edge, drawBatteryRight will place text to the left
-  const int batteryX = rect.x + rect.width - 12 - LyraMetrics::values.batteryWidth;
-  drawBatteryRight(renderer,
-                   Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
-                   showBatteryPercentage);
+  const int batteryX = rect.x + rect.width - 12 - headerBatteryWidth;
+  const int batteryTextY = rect.y + 5;
+  if (showBatteryPercentage) {
+    const auto percentageText = std::to_string(powerManager.getBatteryPercentage()) + "%";
+    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, percentageText.c_str());
+    renderer.drawText(UI_10_FONT_ID, batteryX - textWidth - batteryPercentSpacing, batteryTextY,
+                      percentageText.c_str());
+  }
+  const int batteryIconY = batteryTextY + 6;
+  drawBatteryOutline(renderer, batteryX, batteryIconY, headerBatteryWidth, headerBatteryHeight);
+  fillBatteryIcon(renderer, Rect{batteryX, batteryIconY, headerBatteryWidth, headerBatteryHeight},
+                  powerManager.getBatteryPercentage());
 
   // Clock, mirroring the battery on the opposite corner. Silently absent when
   // there is no usable time yet (no hardware RTC and never NTP-synced this
   // power session) rather than showing a stale or garbage value. Today's date
   // rides alongside it, middle-dot separated (same glyph and spacing
-  // QuickPickActivity's own age/highscore status line uses), in the same
-  // "Mon 17 Aug" format Tasks/Calendar/Budget/Habits already use for their
-  // own header date (organizer::formatDayLabel) -- silently dropped along
-  // with the time when the clock isn't usable yet, same as the time itself.
+  // QuickPickActivity's own age/highscore status line used to use), in the
+  // same "Mon 17 Aug" format Tasks/Calendar/Budget/Habits already use for
+  // their own header date (organizer::formatDayLabel) -- silently dropped
+  // along with the time when the clock isn't usable yet, same as the time
+  // itself. UI_10_FONT_ID and the clock icon match QuickPickActivity's own
+  // glance-strip rows (icon + slightly larger text than the old SMALL_FONT_ID
+  // reading), so this row reads as the same family across every screen that
+  // calls drawHeader(), not just the companion screen.
   char timeBuf[9];
   if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
     char headerClock[32];
@@ -185,7 +228,10 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
       organizer::formatDayLabel(civil::packDate(year, month, day), dateBuf, sizeof(dateBuf));
       snprintf(headerClock, sizeof(headerClock), "%s  \xC2\xB7  %s", timeBuf, dateBuf);
     }
-    renderer.drawText(SMALL_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding, rect.y + 5, headerClock, true);
+    const int clockIconX = rect.x + LyraMetrics::values.contentSidePadding;
+    drawClockIcon(renderer, clockIconX, rect.y + 5, headerClockIconSize);
+    renderer.drawText(UI_10_FONT_ID, clockIconX + headerClockIconSize + headerClockIconGap, rect.y + 5, headerClock,
+                      true);
   }
 
   int maxTitleWidth = title != nullptr ? renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD) : 0;

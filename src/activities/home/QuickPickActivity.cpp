@@ -82,15 +82,40 @@ constexpr int GLANCE_STRIP_GAP = 10;
 constexpr int GLANCE_ICON_SIZE = 24;
 constexpr int GLANCE_ICON_GAP = 8;
 
+// Same dither-overlay technique as OrganizerScreenActivity::dimText() (and
+// BleNotificationsActivity's own local copy): this e-ink panel has no real
+// greyscale, so "dimmed" text is solid text with a checkerboard of pixels
+// punched back out over it. Call right after drawText() at the same
+// position -- used for the Calendar glance line's own trailing date/time,
+// which reads as secondary detail next to the event's own summary.
+void dimText(const GfxRenderer& renderer, const int x, const int y, const int fontId, const char* text) {
+  if (text == nullptr || text[0] == '\0') return;
+  const int width = renderer.getTextWidth(fontId, text);
+  const int height = renderer.getLineHeight(fontId);
+  for (int py = y; py < y + height; py++) {
+    for (int px = x; px < x + width; px++) {
+      if ((px + py) % 2 == 0) renderer.drawPixel(px, py, false);
+    }
+  }
+}
+
 // How much of the header's own vertical space this screen's own layout
 // treats as occupied, now that the header shows only a theme's
 // clock/date/battery combo (see render()'s own comment) rather than the
-// full title+subtitle metrics.headerHeight was sized for. Generous enough
-// for a single small-font line plus the battery icon with a little
-// breathing room on every theme that draws anything into a null-title
-// header at all (see render()'s own comment on RoundedRaffTheme, which
-// draws nothing there regardless, making this value moot for it).
-constexpr int HEADER_CONTENT_HEIGHT = 28;
+// full title+subtitle metrics.headerHeight was sized for. Sized for
+// LyraTheme's own clock row -- a headerClockIconSize (24px, LyraTheme.cpp)
+// icon starting 5px into the header, plus a little breathing room -- now
+// that that row matches the glance strip's own icon size instead of the
+// smaller text-only reading it used to be. Moot on RoundedRaffTheme, which
+// draws nothing into a null-title header at all (see render()'s own
+// comment).
+constexpr int HEADER_CONTENT_HEIGHT = 36;
+// The header-focus highlight (see render()'s own comment) is drawn a little
+// shorter than HEADER_CONTENT_HEIGHT, not the full amount: HEADER_CONTENT_
+// HEIGHT already includes some breathing room below the actual clock/
+// battery content, and using every pixel of it for the highlight too left
+// its own bottom edge touching the glance strip's own icon/text right below.
+constexpr int HEADER_HIGHLIGHT_HEIGHT = HEADER_CONTENT_HEIGHT - 6;
 
 // Same bounds HabitsActivity's own number entry uses -- see its own comment
 // for why 50/1/5.
@@ -758,10 +783,13 @@ void QuickPickActivity::renderLogsTab(const int top, const int height) const {
   }
 }
 
-std::string QuickPickActivity::glanceNextEvent() const {
+std::string QuickPickActivity::glanceNextEvent(std::string& outWhen) const {
   // No text label here -- the calendar icon next to this line is the label
-  // (see render()'s own glance-strip drawing).
-  char line[160];
+  // (see render()'s own glance-strip drawing). outWhen is the trailing
+  // ", Mon 17 Aug[ 14:00]" date/time part, drawn dimmed by render() -- empty
+  // when there's no real event to show a date for (the two fallback texts
+  // below), so render() knows not to draw anything dimmed after them.
+  outWhen.clear();
   if (!GCAL_EVENTS.hasSynced()) {
     return std::string(tr(STR_GCAL_NEVER_SYNCED));
   }
@@ -776,13 +804,15 @@ std::string QuickPickActivity::glanceNextEvent() const {
     if (today != civil::NO_DATE && event.date < today) continue;
     char when[24];
     organizer::formatDayLabel(event.date, when, sizeof(when));
+    char whenFull[32];
     if (event.isAllDay()) {
-      snprintf(line, sizeof(line), "%s, %s", event.summary.c_str(), when);
+      snprintf(whenFull, sizeof(whenFull), ", %s", when);
     } else {
-      snprintf(line, sizeof(line), "%s, %s %02u:%02u", event.summary.c_str(), when,
-               static_cast<unsigned>(event.startMin / 60), static_cast<unsigned>(event.startMin % 60));
+      snprintf(whenFull, sizeof(whenFull), ", %s %02u:%02u", when, static_cast<unsigned>(event.startMin / 60),
+               static_cast<unsigned>(event.startMin % 60));
     }
-    return std::string(line);
+    outWhen = whenFull;
+    return event.summary;
   }
   return std::string(tr(STR_GCAL_NO_EVENTS));
 }
@@ -849,10 +879,11 @@ void QuickPickActivity::render(RenderLock&&) {
   // paint over the clock/date/battery LyraTheme already drew, hiding it
   // instead of turning it white the way an opaque fill can't without also
   // redrawing (and thus duplicating) that theme's own content. Scoped to
-  // HEADER_CONTENT_HEIGHT, not the full header rect, so only the actual
-  // clock/battery row inverts, not the empty space below it.
+  // HEADER_HIGHLIGHT_HEIGHT (see its own comment), not the full header rect,
+  // so only the actual clock/battery row inverts, not the empty space below
+  // it or the glance strip's own icon/text right after that.
   if (focus == Focus::Header) {
-    renderer.invertRect(headerRect.x, headerRect.y, headerRect.width, HEADER_CONTENT_HEIGHT);
+    renderer.invertRect(headerRect.x, headerRect.y, headerRect.width, HEADER_HIGHLIGHT_HEIGHT);
   }
 
   // The glance strip (see this file's own header comment) sits right under
@@ -866,7 +897,10 @@ void QuickPickActivity::render(RenderLock&&) {
   // scripts/convert_icon.py from the existing larger bitmaps rather than
   // original source art, since the pixel data is all this needed.
   constexpr int GLANCE_ROW_COUNT = 2;
-  const std::string glanceLines[GLANCE_ROW_COUNT] = {glanceNextEvent(), glanceNewestAlert()};
+  std::string glanceDim[GLANCE_ROW_COUNT];
+  std::string glanceLines[GLANCE_ROW_COUNT];
+  glanceLines[0] = glanceNextEvent(glanceDim[0]);
+  glanceLines[1] = glanceNewestAlert();
   static const uint8_t* const GLANCE_ICONS[GLANCE_ROW_COUNT] = {Calendar24Icon, Bell24Icon};
   const int glanceLineH = renderer.getLineHeight(UI_10_FONT_ID);
   const int glanceRowH = std::max(glanceLineH, GLANCE_ICON_SIZE);
@@ -880,8 +914,23 @@ void QuickPickActivity::render(RenderLock&&) {
     int rowY = glanceStripTop;
     for (int i = 0; i < GLANCE_ROW_COUNT; i++) {
       renderer.drawIcon(GLANCE_ICONS[i], iconX, rowY, GLANCE_ICON_SIZE);
-      const std::string truncated = renderer.truncatedText(UI_10_FONT_ID, glanceLines[i].c_str(), glanceMaxWidth);
-      renderer.drawText(UI_10_FONT_ID, textX, rowY + (glanceRowH - glanceLineH) / 2, truncated.c_str());
+      const int textY = rowY + (glanceRowH - glanceLineH) / 2;
+      const std::string mainShown = renderer.truncatedText(UI_10_FONT_ID, glanceLines[i].c_str(), glanceMaxWidth);
+      renderer.drawText(UI_10_FONT_ID, textX, textY, mainShown.c_str());
+      // The Calendar row's own trailing date/time (see glanceNextEvent()'s
+      // own outWhen comment), dimmed as secondary detail next to the event's
+      // summary -- only drawn when the summary itself wasn't truncated away,
+      // and only as much of it as still fits.
+      if (!glanceDim[i].empty() && mainShown == glanceLines[i]) {
+        const int mainWidth = renderer.getTextWidth(UI_10_FONT_ID, mainShown.c_str());
+        const int dimMaxWidth = glanceMaxWidth - mainWidth;
+        if (dimMaxWidth > 0) {
+          const int dimX = textX + mainWidth;
+          const std::string dimShown = renderer.truncatedText(UI_10_FONT_ID, glanceDim[i].c_str(), dimMaxWidth);
+          renderer.drawText(UI_10_FONT_ID, dimX, textY, dimShown.c_str());
+          dimText(renderer, dimX, textY, UI_10_FONT_ID, dimShown.c_str());
+        }
+      }
       rowY += glanceRowH + GLANCE_LINE_GAP;
     }
   }
