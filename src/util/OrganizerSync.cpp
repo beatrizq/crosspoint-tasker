@@ -588,6 +588,16 @@ std::string localIsoDateFromUtc(const uint16_t year, const uint8_t month, const 
   return std::string(buf);
 }
 
+uint16_t todayLocalDate() {
+  uint16_t year = 0;
+  uint8_t month = 0;
+  uint8_t day = 0;
+  uint8_t hour = 0;
+  uint8_t minute = 0;
+  if (!halClock.getUtcDateTime(year, month, day, hour, minute)) return civil::NO_DATE;
+  return civil::dateFromIso(localIsoDateFromUtc(year, month, day, hour, minute).c_str());
+}
+
 const char* name(const Service service) {
   // The same name the home grid and the app's own screen use, nickname included:
   // a sync list that called an app something else would read as a different app.

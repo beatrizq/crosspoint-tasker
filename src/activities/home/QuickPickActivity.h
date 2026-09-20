@@ -11,15 +11,28 @@
 
 /**
  * The companion's own screen: a big pose of its figure, mood and speech
- * bubble (a task/habit suggestion, or the sleeping/empty text -- never a BLE
- * notification; those stay on the dedicated Alerts screen), with today's Logs
- * (completed tasks/habits) always shown underneath. No tabs, no Tasks/Habits
- * browsing here -- those live in their own real screens; the mood credit for
- * completing one still updates instantly because acting on it happens
- * through this screen's own single suggestion (Random/Select), not a row
- * list. Age and highscore (lifetime info) sit in the header's own status
- * column; the companion's name is the header title itself (see
- * CompanionTracker::displayName()).
+ * bubble (a task/habit suggestion, or the sleeping/empty text -- the bubble
+ * itself never shows a BLE notification; those stay on the dedicated Alerts
+ * screen), with today's Logs (completed tasks/habits) always shown
+ * underneath. A three-line glance strip sits right under the header -- the
+ * next Google Calendar event, the YNAB "Wants" balance, and the newest BLE
+ * alert (see glanceNextEvent()/glanceBudgetWants()/glanceNewestAlert()), each
+ * led by that app's own icon
+ * instead of a text label -- purely informational: it neither joins the
+ * Left1/Left2 loop below nor sits inside either focus highlight described
+ * there. No tabs, no Tasks/Habits browsing here -- those live in their own
+ * real screens; the mood credit for completing one still updates instantly
+ * because acting on it happens through this screen's own single suggestion
+ * (Random/Select), not a row list. The header itself carries no title or
+ * subtitle of this screen's own (drawHeader() is called with both nullptr;
+ * see render()'s own comment for why) -- the companion's name and its
+ * Age/Highscore, shown here on earlier iterations of this screen, are gone.
+ * On Lyra/Lyra 3 Covers the header is where that theme's own
+ * clock+date+battery combo lives (LyraTheme::drawHeader draws it
+ * unconditionally into whatever rect it's given, regardless of
+ * title/subtitle) -- this screen does not draw a copy of that itself;
+ * hovering the header (see the Focus enum) inverts whatever the theme drew
+ * there, clock/date/battery included.
  *
  * Reached from Home (the companion's own grid tile) or reconstructed on boot
  * from CrossPointState when the device was showing this screen at the moment
@@ -28,33 +41,42 @@
  * on entry and on every reroll (see onEnter()/reroll()) rather than main.cpp
  * fishing it out reactively.
  *
- * Button IDs used here: Left1/Left2 are the pair that moves focus up/down
- * through the Logs row list (Left1 = up, Left2 = down); Right1/Right2 are the
- * pair printed "Apps"/"Select" on the case (Right1 = the button that
- * otherwise always leaves, Right2 = the button that otherwise always opens
- * options). The Logs row list and the companion figure form one continuous
- * circular loop: Left1 off row 0, or Left2 off the last row, moves focus onto
- * the companion figure itself (a rounded selection-box outline spanning
- * (almost) the full content width, bounding the companion section alone --
- * mood label, bubble and sprite -- never the Logs section below it: this
- * screen reads as two sections, companion and Logs, and the highlight only
- * ever claims the one that's focused. Same rounded "outline, not fill" style
- * the pre-grid-tile Home screen once drew around its own companion column)
- * rather than wrapping straight to the opposite end of the list. From there
- * Right2 stays Select (acts on the suggestion) and Right1 -- which otherwise
- * always leaves -- becomes Random instead (on different buttons than a row's
- * own Left1/Left2, which are busy continuing the loop: Left1 on to the last
- * row, Left2 back to the first). Right1 leaves in every other state,
- * reporting the current suggestion as a QuickPickResult so Home's own
- * companion tile stays in sync. setResult() has to be called before finish(),
- * not in onExit() -- ActivityManager::popActivity() reads the result before
- * it runs the outgoing activity's onExit().
- *
- * The Logs row list itself is Select-less -- Right2 on a row is Clear
- * instead, and only when that row is Cached (see LogEntry::cached and
- * clearLogRow()'s own comment): a completion still local/unpushed, actually
- * reversible, as opposed to Synced (a sync already confirmed it, nothing
- * local left to undo, Right2 does nothing there).
+ * Button IDs used here: Left1/Left2 are the pair that moves focus; Right1/
+ * Right2 are the pair printed "Apps"/"Select" on the case (Right1 = the
+ * button that otherwise always leaves, Right2 = the button that otherwise
+ * always opens options). Focus (see the Focus enum) cycles through three
+ * stops in one continuous circular loop -- the Logs row list, the companion
+ * figure, then the header -- in that order (Left2 = forward: last Logs row
+ * -> header -> companion -> wraps to the first row; Left1 = the exact
+ * reverse):
+ *   - Logs row list: Select-less -- Right2 on a row is Clear instead, and
+ *     only when that row is Cached (see LogEntry::cached and
+ *     clearLogRow()'s own comment): a completion still local/unpushed,
+ *     actually reversible, as opposed to Synced (a sync already confirmed
+ *     it, nothing local left to undo, Right2 does nothing there). Right1
+ *     leaves, same as every state except the companion figure.
+ *   - Companion figure: a rounded selection-box outline spanning (almost)
+ *     the full content width, bounding the companion section alone -- mood
+ *     label, bubble and sprite -- never the Logs section below it (this
+ *     screen reads as three sections, and the highlight only ever claims
+ *     the one that's focused). Same rounded "outline, not fill" style the
+ *     pre-grid-tile Home screen once drew around its own companion column.
+ *     Right2 stays Select (acts on the suggestion) and Right1 -- which
+ *     otherwise always leaves -- becomes Random instead.
+ *   - Header (no title/subtitle of this screen's own, just whatever
+ *     clock/date/battery the active theme draws into it): shown inverted
+ *     (a plain black fill, nothing this screen draws back on top of it)
+ *     rather than the companion's outline style when focused -- drawn as an
+ *     overlay on top of the theme's own GUI.drawHeader() output (see
+ *     render()'s own comment) rather than asking the theme for an inverted
+ *     variant, since drawHeader() has no such parameter. Right1 leaves, same
+ *     as the Logs row list; Right2 is Sync All (activityManager.
+ *     goToSyncAll()) instead of Clear/Select, since there's no per-row or
+ *     per-suggestion action to offer here.
+ * Right1 leaving always reports the current suggestion as a QuickPickResult
+ * so Home's own companion tile stays in sync -- setResult() has to be called
+ * before finish(), not in onExit() -- ActivityManager::popActivity() reads
+ * the result before it runs the outgoing activity's onExit().
  *
  * Side Up/Down jump to the previous/next app in the home grid's own order --
  * the same shortcut every app screen has (see
@@ -149,6 +171,13 @@ class QuickPickActivity final : public Activity {
   // Draws the Logs row list below the companion figure/bubble.
   void renderLogsTab(int top, int height) const;
 
+  // The three-line glance strip (see this file's own header comment). Each
+  // returns the exact line to draw, empty/not-synced text included -- render()
+  // never needs to check hasSynced()/getCount() itself.
+  std::string glanceNextEvent() const;
+  std::string glanceBudgetWants() const;
+  std::string glanceNewestAlert() const;
+
   std::string pickedText;
   std::string itemId;
   bool isHabit;
@@ -156,12 +185,12 @@ class QuickPickActivity final : public Activity {
 
   // Row cursor into logEntries(), not a cache index.
   int logSelectedRow = 0;
-  // Left1 off row 0, or Left2 off the last row, moves focus here instead of
-  // wrapping to the opposite end of the list -- one stop above the row list,
-  // not a third index space of its own, so no separate cursor position is
-  // needed. Left1/Left2 continue the same circular traversal back into the
-  // row list (last/first row respectively) while this is true.
-  bool companionFocused = false;
+  // Which of this screen's three sections has focus (see this file's own
+  // header comment for the full Logs/Companion/Header loop). Companion and
+  // Header are single stops with no cursor of their own -- only Logs needs
+  // logSelectedRow above.
+  enum class Focus { Logs, Companion, Header };
+  Focus focus = Focus::Companion;
 
   // Mirrors HomeActivity's own lastCompanionRefreshMs/lastCompanionMood --
   // this screen is reachable directly from sleep (CrossPointState

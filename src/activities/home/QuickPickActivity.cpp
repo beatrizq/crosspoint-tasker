@@ -1,17 +1,22 @@
 #include "QuickPickActivity.h"
 
+#include <CivilTime.h>
+#include <GCalEventCache.h>
 #include <GfxRenderer.h>
 #include <HabitifyHabitCache.h>
 #include <I18n.h>
 #include <TodoistTaskCache.h>
+#include <YnabCategoryCache.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <memory>
 #include <vector>
 
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "activities/organizer/OrganizerLabels.h"
 #include "activities/organizer/RescheduleTaskActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
@@ -21,9 +26,17 @@
 #include "companion/CompanionTracker.h"
 #include "companion/QuickPickRoll.h"
 #include "components/UITheme.h"
+#include "components/icons/bell24.h"
+#include "components/icons/budget24.h"
+#include "components/icons/calendar24.h"
 #include "fontIds.h"
 #include "util/HomeAppOrder.h"
 #include "util/OrganizerActions.h"
+#include "util/OrganizerSync.h"
+
+#ifdef ENABLE_BLE_NOTIFY_SPIKE
+#include "network/BleNotificationQueue.h"
+#endif
 
 namespace {
 // Bigger than the tabbed design's own figure (was 4): with no tab bar and no
@@ -61,6 +74,31 @@ constexpr int SELECTION_BOX_LINE_WIDTH = 2;
 constexpr int SELECTION_BOX_CORNER_RADIUS = 6;
 // Inset from the box's own content on every side.
 constexpr int SELECTION_BOX_PADDING = 10;
+
+// Gap between the glance strip's own three lines, and between the strip and
+// the bubble below it. Tighter than LABEL_GAP (used below the sprite, where
+// the Logs list needs a real section break) -- these three lines are dense
+// glance info, not a section boundary of their own.
+constexpr int GLANCE_LINE_GAP = 4;
+constexpr int GLANCE_STRIP_GAP = 10;
+// The icon in front of each glance line, and the gap before its text.
+constexpr int GLANCE_ICON_SIZE = 24;
+constexpr int GLANCE_ICON_GAP = 8;
+
+// Case-insensitive full-string match, for finding the YNAB category literally
+// named "Wants" among the user's own (freeform) category names -- the
+// existing isYnabInflowCategory() (YnabCategory.h) only checks a prefix,
+// which is right for its own job (matching every numbered "Inflow: ..."
+// category) but wrong for an exact name like this one.
+bool equalsIgnoreCase(const std::string& a, const std::string& b) {
+  if (a.size() != b.size()) return false;
+  for (size_t i = 0; i < a.size(); i++) {
+    if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i]))) {
+      return false;
+    }
+  }
+  return true;
+}
 
 // Same bounds HabitsActivity's own number entry uses -- see its own comment
 // for why 50/1/5.
@@ -108,7 +146,7 @@ void QuickPickActivity::onEnter() {
   // Lands focused on the companion, not a log row -- it's the subject of
   // this screen, and starting anywhere else leaves the entry screen with no
   // highlight visible at all when there happen to be no logs yet.
-  companionFocused = true;
+  focus = Focus::Companion;
   requestUpdate(true);
 }
 
@@ -548,7 +586,7 @@ void QuickPickActivity::loop() {
       swallowBackRelease = false;
       return;
     }
-    if (companionFocused) {
+    if (focus == Focus::Companion) {
       if (!poolEmpty) reroll();
       return;
     }
@@ -559,45 +597,55 @@ void QuickPickActivity::loop() {
 
   const auto entries = logEntries();
   if (mappedInput.wasReleased(MappedInputManager::Button::Left1)) {
-    if (companionFocused) {
-      // Continues the same circular traversal that got here: past the top,
-      // wrapping to the last row -- or, when there are none, straight to
-      // the Logs section's own empty placeholder (see this file's own
-      // header comment: two sections, always both reachable regardless of
-      // whether the second one has any real rows in it).
-      companionFocused = false;
-      logSelectedRow = entries.empty() ? 0 : static_cast<int>(entries.size()) - 1;
-      requestUpdate();
-    } else if (entries.empty() || logSelectedRow == 0) {
-      // Off the top of the list -- move up onto the companion figure
-      // instead of wrapping to the last row. Also taken immediately when
-      // there is no list at all: the empty placeholder is one stop, not a
-      // dead end.
-      companionFocused = true;
-      requestUpdate();
-    } else {
-      logSelectedRow = static_cast<int>((logSelectedRow + entries.size() - 1) % entries.size());
-      requestUpdate();
+    // Reverse of Left2 below -- see this file's own header comment for the
+    // full Logs/Companion/Header loop order.
+    switch (focus) {
+      case Focus::Companion:
+        focus = Focus::Header;
+        break;
+      case Focus::Header:
+        // Off the top -- wrap to the last Logs row, or the empty placeholder
+        // when there are none (two more sections, always both reachable
+        // regardless of whether Logs has any real rows in it).
+        focus = Focus::Logs;
+        logSelectedRow = entries.empty() ? 0 : static_cast<int>(entries.size()) - 1;
+        break;
+      case Focus::Logs:
+        if (entries.empty() || logSelectedRow == 0) {
+          // Off the top of the list -- move onto the companion figure
+          // instead of the header directly, continuing the loop order.
+          focus = Focus::Companion;
+        } else {
+          logSelectedRow = static_cast<int>((logSelectedRow + entries.size() - 1) % entries.size());
+        }
+        break;
     }
+    requestUpdate();
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Left2)) {
-    if (companionFocused) {
-      // Continues the same circular traversal in the other direction,
-      // landing back on the first row (or the empty placeholder).
-      companionFocused = false;
-      logSelectedRow = 0;
-      requestUpdate();
-    } else if (entries.empty() || static_cast<size_t>(logSelectedRow) == entries.size() - 1) {
-      // Off the bottom of the list -- move down onto the companion figure
-      // instead of wrapping to the first row (symmetric with Left1 at the
-      // top). Also taken immediately when there is no list at all.
-      companionFocused = true;
-      requestUpdate();
-    } else {
-      logSelectedRow = static_cast<int>((static_cast<size_t>(logSelectedRow) + 1) % entries.size());
-      requestUpdate();
+    // Forward direction of the loop: last Logs row -> header -> companion ->
+    // wraps to the first row (see this file's own header comment).
+    switch (focus) {
+      case Focus::Logs:
+        if (entries.empty() || static_cast<size_t>(logSelectedRow) == entries.size() - 1) {
+          // Off the bottom of the list -- move onto the header instead of
+          // wrapping straight to the companion figure.
+          focus = Focus::Header;
+        } else {
+          logSelectedRow = static_cast<int>((static_cast<size_t>(logSelectedRow) + 1) % entries.size());
+        }
+        break;
+      case Focus::Header:
+        focus = Focus::Companion;
+        break;
+      case Focus::Companion:
+        // Wraps back to the first row (or the empty placeholder).
+        focus = Focus::Logs;
+        logSelectedRow = 0;
+        break;
     }
+    requestUpdate();
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Right2)) {
@@ -605,18 +653,28 @@ void QuickPickActivity::loop() {
       swallowConfirmRelease = false;
       return;
     }
-    if (companionFocused) {
-      if (poolEmpty) {
-        setResult(QuickPickResult{pickedText, itemId, isHabit, poolEmpty});
-        finish();
-        return;
-      }
-      showOptions();
-    } else if (!entries.empty() && logSelectedRow >= 0 && static_cast<size_t>(logSelectedRow) < entries.size()) {
-      // Clear -- only meaningful for a Cached row (see clearLogRow()'s own
-      // comment); a no-op for a Synced one, matching render()'s own blank
-      // confirmLabel there.
-      clearLogRow(entries[static_cast<size_t>(logSelectedRow)]);
+    switch (focus) {
+      case Focus::Companion:
+        if (poolEmpty) {
+          setResult(QuickPickResult{pickedText, itemId, isHabit, poolEmpty});
+          finish();
+          return;
+        }
+        showOptions();
+        break;
+      case Focus::Header:
+        // No per-row or per-suggestion action to offer for the header itself
+        // (see this file's own header comment) -- Sync All instead.
+        activityManager.goToSyncAll();
+        break;
+      case Focus::Logs:
+        if (!entries.empty() && logSelectedRow >= 0 && static_cast<size_t>(logSelectedRow) < entries.size()) {
+          // Clear -- only meaningful for a Cached row (see clearLogRow()'s
+          // own comment); a no-op for a Synced one, matching render()'s own
+          // blank confirmLabel there.
+          clearLogRow(entries[static_cast<size_t>(logSelectedRow)]);
+        }
+        break;
     }
   }
 }
@@ -653,7 +711,8 @@ void QuickPickActivity::renderLogsTab(const int top, const int height) const {
     // onto it doesn't make it jump.
     const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
     const int rowY = listTop + (listHeight - ROW_HEIGHT) / 2;
-    if (!companionFocused) {
+    const bool logsFocused = focus == Focus::Logs;
+    if (logsFocused) {
       // The Logs section itself is focused, same as when a real row is
       // selected below -- the empty placeholder gets that section's own
       // row-highlight treatment (solid fill, inverted text) rather than the
@@ -661,7 +720,7 @@ void QuickPickActivity::renderLogsTab(const int top, const int height) const {
       // here too.
       renderer.fillRect(0, rowY, pageWidth, ROW_HEIGHT);
     }
-    renderer.drawCenteredText(UI_10_FONT_ID, rowY + (ROW_HEIGHT - lineH) / 2, tr(STR_LOG_EMPTY), companionFocused);
+    renderer.drawCenteredText(UI_10_FONT_ID, rowY + (ROW_HEIGHT - lineH) / 2, tr(STR_LOG_EMPTY), !logsFocused);
     return;
   }
 
@@ -673,9 +732,9 @@ void QuickPickActivity::renderLogsTab(const int top, const int height) const {
     if (i >= static_cast<int>(entries.size())) break;
     const auto& entry = entries[static_cast<size_t>(i)];
     const int rowY = listTop + row * ROW_HEIGHT;
-    // Focus is up on the companion figure, not on any row -- see this file's
-    // own header comment -- so no row shows the selection fill right now.
-    const bool selected = !companionFocused && i == logSelectedRow;
+    // Focus is elsewhere (companion or header), not on any row -- see this
+    // file's own header comment -- so no row shows the selection fill.
+    const bool selected = focus == Focus::Logs && i == logSelectedRow;
     const bool ink = !selected;
 
     if (selected) renderer.fillRect(0, rowY, pageWidth, ROW_HEIGHT);
@@ -695,6 +754,70 @@ void QuickPickActivity::renderLogsTab(const int top, const int height) const {
   }
 }
 
+std::string QuickPickActivity::glanceNextEvent() const {
+  // No text label here -- the calendar icon next to this line is the label
+  // (see render()'s own glance-strip drawing).
+  char line[160];
+  if (!GCAL_EVENTS.hasSynced()) {
+    return std::string(tr(STR_GCAL_NEVER_SYNCED));
+  }
+  // GCalClient's own fetch window already starts at "today" as of the last
+  // sync (see OrganizerSync.cpp's own fetchEvents() call), but a sync can be
+  // hours or days old -- today's own local date (organizerSync::
+  // todayLocalDate(), re-derived fresh here) can have moved on since, so the
+  // cached front() entry is not trusted blindly.
+  const uint16_t today = organizerSync::todayLocalDate();
+  for (const auto& event : GCAL_EVENTS.getEvents()) {
+    if (event.date == civil::NO_DATE) continue;
+    if (today != civil::NO_DATE && event.date < today) continue;
+    char when[24];
+    organizer::formatDayLabel(event.date, when, sizeof(when));
+    if (event.isAllDay()) {
+      snprintf(line, sizeof(line), "%s, %s", event.summary.c_str(), when);
+    } else {
+      snprintf(line, sizeof(line), "%s, %s %02u:%02u", event.summary.c_str(), when,
+               static_cast<unsigned>(event.startMin / 60), static_cast<unsigned>(event.startMin % 60));
+    }
+    return std::string(line);
+  }
+  return std::string(tr(STR_GCAL_NO_EVENTS));
+}
+
+std::string QuickPickActivity::glanceBudgetWants() const {
+  // No text label here -- the budget icon next to this line is the label
+  // (see render()'s own glance-strip drawing).
+  if (!YNAB_CATEGORIES.hasSynced()) {
+    return std::string(tr(STR_YNAB_NEVER_SYNCED));
+  }
+  for (const auto& category : YNAB_CATEGORIES.getCategories()) {
+    if (equalsIgnoreCase(category.name, "Wants")) {
+      return category.balance;
+    }
+  }
+  return std::string(tr(STR_COMPANION_GLANCE_NO_WANTS));
+}
+
+std::string QuickPickActivity::glanceNewestAlert() const {
+  // No text label here -- the bell icon next to this line is the label (see
+  // render()'s own glance-strip drawing).
+#ifdef ENABLE_BLE_NOTIFY_SPIKE
+  // Always index 0 (newest), fresh every render -- no dismiss/cursor state:
+  // the line simply shows whatever the newest alert currently is, and gets
+  // replaced the moment a newer one arrives.
+  if (BLE_NOTIFICATIONS.getCount() > 0) {
+    const auto& entry = BLE_NOTIFICATIONS.getEntry(0);
+    char line[192];
+    if (entry.content[0] != '\0') {
+      snprintf(line, sizeof(line), "%s: %s", entry.title, entry.content);
+    } else {
+      snprintf(line, sizeof(line), "%s", entry.title);
+    }
+    return std::string(line);
+  }
+#endif
+  return std::string(tr(STR_BLE_NO_NOTIFICATIONS));
+}
+
 void QuickPickActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
@@ -702,26 +825,74 @@ void QuickPickActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  // Age and highscore sit in the header's own status column -- lifetime
-  // info, unrelated to today's suggestion or log.
-  char status[64];
-  const std::string ageValue = CompanionTracker::formatAge(COMPANION_STATE.activatedDay);
-  snprintf(status, sizeof(status), "%s: %s  \xC2\xB7  %s: %u", tr(STR_COMPANION_AGE), ageValue.c_str(),
-           tr(STR_COMPANION_HIGHSCORE), COMPANION_STATE.ledger.bestDayPoints);
-  // No header rule on this screen (see BaseTheme::drawHeader()'s own
-  // showRule comment) -- the companion-focus box highlight sits right where
-  // it would otherwise be, and the two together would read as a redundant
-  // double line.
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 CompanionTracker::displayName(), status, /*showRule=*/false);
+  // Header stays at the very top, same as every other screen -- on Lyra/
+  // Lyra 3 Covers this is also where that theme's own clock+date+battery
+  // combo lives (LyraTheme::drawHeader draws it unconditionally into
+  // whatever rect it's given, regardless of title/subtitle); this screen
+  // does not draw a copy of that itself. Title and subtitle (the companion's
+  // name and its Age/Highscore) are both deliberately passed as nullptr --
+  // this header is the clock+date+battery row alone. On Lyra, title's own
+  // text and the header's rule underneath it are both drawn inside the same
+  // `if (title)` block (LyraTheme.cpp), and subtitle inside its own
+  // `if (subtitle)` block, so nullptr drops both while leaving the
+  // clock/date/battery combo above (drawn unconditionally by that same
+  // function) untouched. This is Lyra-specific: RoundedRaffTheme's own
+  // drawHeader() returns immediately on a null title, so on that theme this
+  // whole header band goes blank (battery included) rather than losing just
+  // the title/subtitle -- not something this screen can route around
+  // without a theme-level change.
+  const int headerTop = metrics.topPadding;
+  const Rect headerRect{0, headerTop, pageWidth, metrics.headerHeight};
+  GUI.drawHeader(renderer, headerRect, /*title=*/nullptr, /*subtitle=*/nullptr, /*showRule=*/true);
+
+  // Hovering the header (see this file's own header comment): drawn
+  // inverted -- a straight black fill on top of whatever the active theme
+  // just drew above (on Lyra, its own clock/date/battery, simply covered
+  // while focused) -- rather than asking the theme for an inverted variant.
+  // This screen already owns its other focus highlights directly (see
+  // SELECTION_BOX_LINE_WIDTH's own comment), and duplicating any one
+  // theme's own header layout here would both cross that boundary and only
+  // look right on whichever theme happens to be active. Nothing of this
+  // screen's own to redraw on top -- there's no title/subtitle left to show.
+  if (focus == Focus::Header) {
+    renderer.fillRect(headerRect.x, headerRect.y, headerRect.width, headerRect.height);
+  }
+
+  // The glance strip (see this file's own header comment) sits right under
+  // the header -- purely informational itself (it neither joins the
+  // Left1/Left2 loop below nor sits inside either focus highlight), but
+  // contentTop (defined after it) is what the companion figure/bubble and
+  // its own focus box are actually positioned from. Each line is led by
+  // that app's own icon (Calendar/Budget/Bell) instead of a text label --
+  // GLANCE_ICON_SIZE (24px) is a size no theme's icon set already had (only
+  // 32px/80px assets existed for these three), generated via
+  // scripts/convert_icon.py from the existing larger bitmaps rather than
+  // original source art, since the pixel data is all this needed.
+  const std::string glanceLines[3] = {glanceNextEvent(), glanceBudgetWants(), glanceNewestAlert()};
+  static const uint8_t* const GLANCE_ICONS[3] = {Calendar24Icon, Budget24Icon, Bell24Icon};
+  const int glanceLineH = renderer.getLineHeight(UI_10_FONT_ID);
+  const int glanceRowH = std::max(glanceLineH, GLANCE_ICON_SIZE);
+  const int glanceStripTop = headerTop + metrics.headerHeight;
+  const int glanceStripHeight = glanceRowH * 3 + GLANCE_LINE_GAP * 2 + GLANCE_STRIP_GAP;
+  {
+    const int iconX = metrics.contentSidePadding;
+    const int textX = iconX + GLANCE_ICON_SIZE + GLANCE_ICON_GAP;
+    const int glanceMaxWidth = pageWidth - metrics.contentSidePadding * 2 - GLANCE_ICON_SIZE - GLANCE_ICON_GAP;
+    int rowY = glanceStripTop;
+    for (int i = 0; i < 3; i++) {
+      renderer.drawIcon(GLANCE_ICONS[i], iconX, rowY, GLANCE_ICON_SIZE);
+      const std::string truncated = renderer.truncatedText(UI_10_FONT_ID, glanceLines[i].c_str(), glanceMaxWidth);
+      renderer.drawText(UI_10_FONT_ID, textX, rowY + (glanceRowH - glanceLineH) / 2, truncated.c_str());
+      rowY += glanceRowH + GLANCE_LINE_GAP;
+    }
+  }
 
   // SELECTION_BOX_PADDING here, not metrics.verticalSpacing: the companion
   // section's own box highlight is drawn at contentTop - SELECTION_BOX_PADDING
   // (see below), and the point of this offset is landing that box's own top
-  // edge exactly on the header's bottom edge -- the same height the header
-  // rule this screen no longer draws (see the drawHeader() call above) used
-  // to sit at -- rather than leaving the old, larger vertical gap below it.
-  const int contentTop = metrics.topPadding + metrics.headerHeight + SELECTION_BOX_PADDING;
+  // edge exactly on the glance strip's bottom edge, rather than leaving the
+  // old, larger vertical gap below it.
+  const int contentTop = glanceStripTop + glanceStripHeight + SELECTION_BOX_PADDING;
   const int contentBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
   const int totalContentHeight = contentBottom - contentTop;
   const int contentWidth = pageWidth - MARGIN * 2;
@@ -773,15 +944,16 @@ void QuickPickActivity::render(RenderLock&&) {
   // header comment): a rounded selection-box outline bounding the companion
   // section only -- bubble, sprite and the mood label under it -- fixed to
   // (almost) the full content width, but never reaching into the Logs
-  // section below it: this screen reads as two sections (companion, logs),
-  // and the highlight should only ever claim the one that's focused. Left
+  // section below it: this screen reads as three sections (header,
+  // companion, logs), and the highlight should only ever claim the one
+  // that's focused. Left
   // and right edges line up with metrics.contentSidePadding -- the same
   // inset the header's own title/status text and the Logs section's own
   // rows use -- rather than this file's own (slightly wider) MARGIN, so the
   // box reads as bounding the same content column everything else on this
   // screen already lines up with. See SELECTION_BOX_LINE_WIDTH's own comment
   // for where this style comes from.
-  if (companionFocused) {
+  if (focus == Focus::Companion) {
     const int boxX = metrics.contentSidePadding;
     const int boxWidth = pageWidth - metrics.contentSidePadding * 2;
     const int boxY = contentTop - SELECTION_BOX_PADDING;
@@ -816,18 +988,28 @@ void QuickPickActivity::render(RenderLock&&) {
   const char* confirmLabel = "";
   const char* leftLabel = tr(STR_DIR_UP);
   const char* rightLabel = tr(STR_DIR_DOWN);
-  if (companionFocused) {
-    // Hovering the companion figure exposes the suggestion actions on
-    // Right1/Right2 rather than a row's own Left1/Left2 (which are busy
-    // continuing the circular loop here).
-    backLabel = poolEmpty ? "" : tr(STR_QUICK_PICK_RANDOM);
-    confirmLabel = poolEmpty ? "" : tr(STR_SELECT);
-  } else {
-    const auto entries = logEntries();
-    const bool onCachedRow = !entries.empty() && logSelectedRow >= 0 &&
-                             static_cast<size_t>(logSelectedRow) < entries.size() &&
-                             entries[static_cast<size_t>(logSelectedRow)].cached;
-    confirmLabel = onCachedRow ? tr(STR_CLEAR_BUTTON) : "";
+  switch (focus) {
+    case Focus::Companion:
+      // Hovering the companion figure exposes the suggestion actions on
+      // Right1/Right2 rather than a row's own Left1/Left2 (which are busy
+      // continuing the circular loop here).
+      backLabel = poolEmpty ? "" : tr(STR_QUICK_PICK_RANDOM);
+      confirmLabel = poolEmpty ? "" : tr(STR_SELECT);
+      break;
+    case Focus::Header:
+      // Right1 stays Home (the default above); Right2 is Sync All instead of
+      // Clear/Select -- there's no per-row or per-suggestion action to offer
+      // for the header itself.
+      confirmLabel = tr(STR_SYNC_ALL);
+      break;
+    case Focus::Logs: {
+      const auto entries = logEntries();
+      const bool onCachedRow = !entries.empty() && logSelectedRow >= 0 &&
+                               static_cast<size_t>(logSelectedRow) < entries.size() &&
+                               entries[static_cast<size_t>(logSelectedRow)].cached;
+      confirmLabel = onCachedRow ? tr(STR_CLEAR_BUTTON) : "";
+      break;
+    }
   }
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, leftLabel, rightLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

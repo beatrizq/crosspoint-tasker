@@ -67,4 +67,14 @@ const char* run(Service service);
  */
 std::string localIsoDateFromUtc(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute);
 
+/**
+ * Today, packed, in local time -- civil::NO_DATE if the clock isn't usable
+ * yet (no hardware RTC and never NTP-synced this power session). The same
+ * halClock::getUtcDateTime() + localIsoDateFromUtc() + civil::dateFromIso()
+ * sequence CompanionTracker::resolveLocalDayAndMinute() and main.cpp's own
+ * boot-time check already spell out by hand, for a caller that just needs
+ * today's date and none of the rollover side effects those two also trigger.
+ */
+uint16_t todayLocalDate();
+
 }  // namespace organizerSync
