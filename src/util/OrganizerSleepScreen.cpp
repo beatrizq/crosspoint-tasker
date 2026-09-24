@@ -27,7 +27,7 @@ bool installCustomWallpaper(const std::string& sourcePath) {
   bool success = false;
   HalFile inFile, outFile;
   if (Storage.openFileForRead("OSLEEP", sourcePath, inFile)) {
-    if (Storage.openFileForWrite("OSLEEP", WALLPAPER_PATH, outFile)) {
+    if (Storage.openFileForWrite("OSLEEP", COVER_PATH, outFile)) {
       auto buffer = makeUniqueNoThrow<uint8_t[]>(COPY_CHUNK);
       if (buffer) {
         success = true;

@@ -73,10 +73,10 @@ void SleepActivity::renderCustomSleepScreen() const {
   auto dir = Storage.open("/.sleep");
 
   // A wallpaper picked in the image viewer ("Set Cover") wins, then the user's
-  // own sleep.bmp on the root of the sd card -- either one takes priority over
-  // the /sleep folder. They are separate files so that picking a wallpaper
-  // never overwrites sleep.bmp.
-  for (const char* path : {organizerSleepScreen::WALLPAPER_PATH, "/sleep.bmp"}) {
+  // own sleep_custom.bmp on the root of the sd card (sleep.bmp, its old name,
+  // still works) -- any of them takes priority over the /sleep folder. They are
+  // separate files so that picking a wallpaper never overwrites the user's own.
+  for (const char* path : {organizerSleepScreen::COVER_PATH, organizerSleepScreen::CUSTOM_PATH, "/sleep.bmp"}) {
     HalFile file;
     if (!Storage.openFileForRead("SLP", path, file)) continue;
     Bitmap bitmap(file, true);
