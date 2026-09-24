@@ -360,14 +360,20 @@ void LyraTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::ve
     const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tab.label, EpdFontFamily::REGULAR);
 
     if (tab.selected) {
+      // The selected tab is the same rounded pill either way. With the bar
+      // focused it is solid black; with focus elsewhere it keeps that shape as
+      // a bordered box, filled with the very LightGray dither the focused bar's
+      // own background uses (fillRoundedRect and that background both go
+      // through fillRectDither, and the pattern is keyed to screen position, so
+      // it is exactly the same grey).
+      const int pillY = rect.y + 1;
+      const int pillWidth = textWidth + 2 * hPaddingInSelection;
+      const int pillHeight = rect.height - 4;
       if (selected) {
-        renderer.fillRoundedRect(currentX, rect.y + 1, textWidth + 2 * hPaddingInSelection, rect.height - 4,
-                                 cornerRadius, Color::Black);
+        renderer.fillRoundedRect(currentX, pillY, pillWidth, pillHeight, cornerRadius, Color::Black);
       } else {
-        renderer.fillRectDither(currentX, rect.y, textWidth + 2 * hPaddingInSelection, rect.height - 3,
-                                Color::LightGray);
-        renderer.drawLine(currentX, rect.y + rect.height - 3, currentX + textWidth + 2 * hPaddingInSelection,
-                          rect.y + rect.height - 3, 2, true);
+        renderer.fillRoundedRect(currentX, pillY, pillWidth, pillHeight, cornerRadius, Color::LightGray);
+        renderer.drawRoundedRect(currentX, pillY, pillWidth, pillHeight, selectionLineWidth, cornerRadius, true);
       }
     }
 

@@ -64,10 +64,11 @@ constexpr int SELECTION_BOX_PADDING = 10;
 
 // This screen's own rule at the top of the Tasks/Habits section, so it reads
 // as visually separate from the companion above it. The same weight as the
-// line LyraTheme::drawTabBar() draws under the tab bar (a plain 1px line),
-// with a little air between the two before the tab bar's own content starts.
+// line LyraTheme::drawTabBar() draws under the tab bar (a plain 1px line).
+// The tab bar starts directly under it, with no gap: a focused bar's grey
+// background begins at its own top edge, and any space left here showed as a
+// white stripe between the line and the grey.
 constexpr int SECTION_RULE_LINE_WIDTH = 1;
-constexpr int SECTION_RULE_GAP = 4;
 
 // Gap between the glance strip's own event lines, and between the strip and
 // the bubble below it. Tighter than LABEL_GAP (used below the sprite, where
@@ -1331,7 +1332,7 @@ void QuickPickActivity::render(RenderLock&&) {
   // screens' own tab bars exactly, via the shared TaskTabModel/HabitTabModel).
   const bool habitsShowing = section == Section::Habits;
   renderer.drawLine(0, sectionTop, pageWidth - 1, sectionTop, SECTION_RULE_LINE_WIDTH, true);
-  const int tabBarTop = sectionTop + SECTION_RULE_LINE_WIDTH + SECTION_RULE_GAP;
+  const int tabBarTop = sectionTop + SECTION_RULE_LINE_WIDTH;
 
   // tabBarFocused (not activeKind) decides whether the bar is drawn
   // "focused" (matches OrganizerScreenActivity's own "index 0 is the tab
