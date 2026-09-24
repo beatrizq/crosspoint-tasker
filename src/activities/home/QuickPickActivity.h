@@ -129,7 +129,12 @@
  * they are labelled Tasks/Habits and choose which section shows below the
  * companion (switchSection()), from whichever focus stop the cursor is on --
  * independent of Left1/Left2/Right1/Right2 above. This is the one screen
- * from which the app-jump shortcut is not reachable at all.
+ * from which the app-jump shortcut is not reachable at all. The section
+ * below the companion never starts above the bottom of the longest of
+ * those two labels' boxes plus a little spacing (SECTION_SIDE_BUTTON_GAP),
+ * so the labels never sit beside its tab bar or rows; it sits lower than
+ * that whenever the companion above it (calendar events, a longer bubble)
+ * takes more room.
  */
 class QuickPickActivity final : public Activity {
  public:

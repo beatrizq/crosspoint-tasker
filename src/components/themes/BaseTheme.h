@@ -237,6 +237,11 @@ class BaseTheme {
   // selection.
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn,
                                    bool topSelected = false, bool bottomSelected = false) const;
+  // The y just below the lowest side-button box drawSideButtonHints() draws for
+  // these two labels -- how far down a screen must start its content so the
+  // labels never sit beside it. 0 when there is no such line: nothing is drawn
+  // (touch devices), or the two buttons aren't at one shared height (the X4).
+  virtual int getSideButtonHintsBottom(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   virtual int getListRowStep(bool hasSubtitle) const;
   virtual int getListPageItems(int contentHeight, bool hasSubtitle) const;
   virtual void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,

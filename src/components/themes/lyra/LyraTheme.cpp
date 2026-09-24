@@ -52,6 +52,29 @@ constexpr int cornerRadius = 6;
 // so a selected cover, companion, and app tile all read as the same gesture.
 constexpr int selectionLineWidth = 2;
 constexpr int topHintButtonY = 345;
+
+// The side-button label boxes (drawSideButtonHints) and the geometry
+// getSideButtonHintsBottom() needs to say where they end.
+//
+// minButtonHeight is a box's floor: a short label doesn't shrink it below this,
+// and it is the length the physical button itself is taken to have. The
+// physical buttons don't move -- on the X3 the original minButtonHeight-tall
+// box started at y=155, so that is where its centre sits, and a taller box (a
+// longer label) grows symmetrically around that centre rather than downward
+// from 155, so the label stays centred on the button.
+constexpr int minButtonHeight = 78;
+constexpr int stackPadding = 8;       // Above and below the stacked letters, inside the border
+constexpr int stackLineAdvance = 20;  // Letter-to-letter distance (the font's own line height is 23)
+constexpr int x3ButtonCenterY = 155 + minButtonHeight / 2;
+
+// A box grows to fit its label's stacked letters (one per line, see
+// GfxRenderer::drawTextStacked) rather than staying a fixed height, so the
+// border always encloses the whole label. An empty label falls back to the
+// floor, which keeps the X4 layout where it was.
+int sideButtonBoxHeight(const GfxRenderer& renderer, const char* label) {
+  return std::max(minButtonHeight,
+                  renderer.getTextStackedHeight(SMALL_FONT_ID, label, stackLineAdvance) + 2 * stackPadding);
+}
 constexpr int maxListValueWidth = 200;
 constexpr int mainMenuIconSize = 32;
 // The tile grid has a whole tile to fill, so its artwork is larger.
@@ -328,9 +351,9 @@ void LyraTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::ve
                            bool selected) const {
   int currentX = rect.x + LyraMetrics::values.contentSidePadding;
 
-  if (selected) {
-    renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::LightGray);
-  }
+  // Grey whether or not the bar has focus: only the selected tab's pill (below)
+  // changes between the two, so the bar keeps one steady background.
+  renderer.fillRectDither(rect.x, rect.y, rect.width, rect.height, Color::LightGray);
 
   if (tabs.empty()) {
     renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
@@ -362,17 +385,16 @@ void LyraTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::ve
     if (tab.selected) {
       // The selected tab is the same rounded pill either way. With the bar
       // focused it is solid black; with focus elsewhere it keeps that shape as
-      // a bordered box, filled with the very LightGray dither the focused bar's
-      // own background uses (fillRoundedRect and that background both go
-      // through fillRectDither, and the pattern is keyed to screen position, so
-      // it is exactly the same grey).
-      const int pillY = rect.y + 1;
+      // just a border, the bar's own grey background showing through inside.
+      // 2px clear above and below the pill, between it and the lines that
+      // bound the bar (the rule above it, drawLine() below): the pill spans
+      // rows 2..height-4, the bar's own bottom line sits on row height-1.
+      const int pillY = rect.y + 2;
       const int pillWidth = textWidth + 2 * hPaddingInSelection;
-      const int pillHeight = rect.height - 4;
+      const int pillHeight = rect.height - 5;
       if (selected) {
         renderer.fillRoundedRect(currentX, pillY, pillWidth, pillHeight, cornerRadius, Color::Black);
       } else {
-        renderer.fillRoundedRect(currentX, pillY, pillWidth, pillHeight, cornerRadius, Color::LightGray);
         renderer.drawRoundedRect(currentX, pillY, pillWidth, pillHeight, selectionLineWidth, cornerRadius, true);
       }
     }
@@ -611,32 +633,16 @@ void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 
   const int screenWidth = renderer.getScreenWidth();
   constexpr int buttonWidth = LyraMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
-  constexpr int minButtonHeight = 78;   // Floor for a box -- a short label doesn't shrink it below this
-  constexpr int stackPadding = 8;       // Above and below the stacked letters, inside the border
-  constexpr int stackLineAdvance = 20;  // Letter-to-letter distance (the font's own line height is 23)
   constexpr int buttonMargin = 0;
-
-  // A box grows to fit its label's stacked letters (one per line, see
-  // GfxRenderer::drawTextStacked) rather than staying a fixed height, so the
-  // border always encloses the whole label. An empty label falls back to the
-  // floor, which keeps the X4 layout below where it was.
-  const auto boxHeightFor = [&](const char* label) {
-    return std::max(minButtonHeight,
-                    renderer.getTextStackedHeight(SMALL_FONT_ID, label, stackLineAdvance) + 2 * stackPadding);
-  };
 
   // A selected label is drawn inverted -- white letters on a black fill of the
   // same shape as its border -- so it reads as the current choice.
   if (gpio.deviceIsX3()) {
-    // X3 layout: Up on left side, Down on right side, positioned higher
-    // The physical buttons don't move: the original minButtonHeight-tall box
-    // started at y=155, so that's where its centre sat. A taller box grows
-    // symmetrically around that centre (not downward from y=155), so the
-    // label stays centred on the button.
-    constexpr int x3ButtonCenterY = 155 + minButtonHeight / 2;
+    // X3 layout: Up on left side, Down on right side, positioned higher --
+    // both boxes centred on x3ButtonCenterY (see its own comment above).
 
     if (topBtn != nullptr && topBtn[0] != '\0') {
-      const int height = boxHeightFor(topBtn);
+      const int height = sideButtonBoxHeight(renderer, topBtn);
       const int top = x3ButtonCenterY - height / 2;
       if (topSelected) {
         renderer.fillRoundedRect(buttonMargin, top, buttonWidth, height, cornerRadius, false, true, false, true,
@@ -648,7 +654,7 @@ void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
     }
 
     if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-      const int height = boxHeightFor(bottomBtn);
+      const int height = sideButtonBoxHeight(renderer, bottomBtn);
       const int top = x3ButtonCenterY - height / 2;
       const int rightX = screenWidth - buttonWidth;
       if (bottomSelected) {
@@ -662,8 +668,8 @@ void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   } else {
     // X4 layout: Both buttons stacked on right side
     const int x = screenWidth - buttonWidth;
-    const int topHeight = boxHeightFor(topBtn);
-    const int bottomHeight = boxHeightFor(bottomBtn);
+    const int topHeight = sideButtonBoxHeight(renderer, topBtn);
+    const int bottomHeight = sideButtonBoxHeight(renderer, bottomBtn);
     // The second box starts below the first one's own (variable) height plus
     // the 5px gap between them.
     const int bottomTop = topHintButtonY + topHeight + 5;
@@ -690,6 +696,18 @@ void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
                                stackLineAdvance, /*black=*/!bottomSelected);
     }
   }
+}
+
+int LyraTheme::getSideButtonHintsBottom(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
+  // Only the X3 has the two buttons on opposite edges at one shared height, so
+  // only there is there a single line the content can sit below. The X4 stacks
+  // them one under the other on a single side, far lower down.
+  if (gpio.hasTouch() || !gpio.deviceIsX3()) {
+    return 0;
+  }
+  const int tallest = std::max(sideButtonBoxHeight(renderer, topBtn), sideButtonBoxHeight(renderer, bottomBtn));
+  const int top = x3ButtonCenterY - tallest / 2;
+  return top + tallest;
 }
 
 void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,

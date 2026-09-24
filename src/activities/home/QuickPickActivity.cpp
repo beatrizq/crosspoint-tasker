@@ -69,6 +69,13 @@ constexpr int SELECTION_BOX_PADDING = 10;
 // background begins at its own top edge, and any space left here showed as a
 // white stripe between the line and the grey.
 constexpr int SECTION_RULE_LINE_WIDTH = 1;
+// The section (its rule, tab bar and rows) never starts above the bottom of
+// the longest side-button label plus this much clear space, so the labels
+// never sit beside the tab bar or the list. Sized off the drawn label boxes
+// (GUI.getSideButtonHintsBottom()), so a longer label -- another language,
+// say -- moves the section down by itself. Below that floor the section sits
+// wherever the companion above it leaves room (calendar events push it down).
+constexpr int SECTION_SIDE_BUTTON_GAP = 6;
 
 // Gap between the glance strip's own event lines, and between the strip and
 // the bubble below it. Tighter than LABEL_GAP (used below the sprite, where
@@ -1320,7 +1327,15 @@ void QuickPickActivity::render(RenderLock&&) {
   // Straight from the sprite to the embedded Tasks section below -- no mood
   // label in between any more (removed entirely, freeing this space for the
   // section to sit higher).
-  const int sectionTop = spriteTop + spriteH + LABEL_GAP;
+  const char* const tasksLabel = tr(STR_COMPANION_SIDE_TASKS);
+  const char* const habitsLabel = tr(STR_COMPANION_SIDE_HABITS);
+  const int sideButtonsBottom = GUI.getSideButtonHintsBottom(renderer, tasksLabel, habitsLabel);
+  const int sectionTopNatural = spriteTop + spriteH + LABEL_GAP;
+  // 0 means there is no shared line to sit below (see getSideButtonHintsBottom()),
+  // so the section just stays where the companion leaves room.
+  const int sectionTop = sideButtonsBottom > 0
+                             ? std::max(sectionTopNatural, sideButtonsBottom + SECTION_SIDE_BUTTON_GAP)
+                             : sectionTopNatural;
 
   // The section below is a scaled-down rendering of the real Tasks or Habits
   // screen (see this file's own header comment) -- but without that screen's
@@ -1445,7 +1460,7 @@ void QuickPickActivity::render(RenderLock&&) {
   // Side button labels (Up = "Tasks", Down = "Habits") -- which section
   // shows below the companion (see loop()'s own comment above and
   // switchSection()). The one showing is drawn inverted.
-  GUI.drawSideButtonHints(renderer, tr(STR_COMPANION_SIDE_TASKS), tr(STR_COMPANION_SIDE_HABITS),
+  GUI.drawSideButtonHints(renderer, tasksLabel, habitsLabel,
                           /*topSelected=*/section == Section::Tasks, /*bottomSelected=*/section == Section::Habits);
 
   renderer.displayBuffer();

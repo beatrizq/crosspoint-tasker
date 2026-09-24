@@ -29,6 +29,29 @@ constexpr int bookmarkStatusIconHeight = 14;
 constexpr int bookmarkStatusIconGap = 4;
 constexpr int bookmarkStatusIconTopCrop = 2;
 
+// The side-button label boxes (drawSideButtonHints) and the geometry
+// getSideButtonHintsBottom() needs to say where they end.
+//
+// minButtonHeight is a box's floor: a short label doesn't shrink it below this,
+// and it is the length the physical button itself is taken to have. The
+// physical buttons don't move -- on the X3 the original minButtonHeight-tall
+// box started at y=155, so that is where its centre sits, and a taller box (a
+// longer label) grows symmetrically around that centre rather than downward
+// from 155, so the label stays centred on the button.
+constexpr int minButtonHeight = 80;
+constexpr int stackPadding = 8;       // Above and below the stacked letters, inside the border
+constexpr int stackLineAdvance = 20;  // Letter-to-letter distance (the font's own line height is 23)
+constexpr int x3ButtonCenterY = 155 + minButtonHeight / 2;
+
+// A box grows to fit its label's stacked letters (one per line, see
+// GfxRenderer::drawTextStacked) rather than staying a fixed height, so the
+// border always encloses the whole label. An empty label falls back to the
+// floor, which keeps the X4 layout where it was.
+int sideButtonBoxHeight(const GfxRenderer& renderer, const char* label) {
+  return std::max(minButtonHeight,
+                  renderer.getTextStackedHeight(SMALL_FONT_ID, label, stackLineAdvance) + 2 * stackPadding);
+}
+
 void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int y) {
   constexpr int bytesPerRow = bookmarkStatusIconWidth / 8;
   for (int row = 0; row < bookmarkStatusIconHeight; ++row) {
@@ -194,32 +217,16 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 
   const int screenWidth = renderer.getScreenWidth();
   constexpr int buttonWidth = BaseMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
-  constexpr int minButtonHeight = 80;   // Floor for a box -- a short label doesn't shrink it below this
-  constexpr int stackPadding = 8;       // Above and below the stacked letters, inside the border
-  constexpr int stackLineAdvance = 20;  // Letter-to-letter distance (the font's own line height is 23)
   constexpr int buttonMargin = 4;
-
-  // A box grows to fit its label's stacked letters (one per line, see
-  // GfxRenderer::drawTextStacked) rather than staying a fixed height, so the
-  // border always encloses the whole label. An empty label falls back to the
-  // floor, which keeps the X4 layout below where it was.
-  const auto boxHeightFor = [&](const char* label) {
-    return std::max(minButtonHeight,
-                    renderer.getTextStackedHeight(SMALL_FONT_ID, label, stackLineAdvance) + 2 * stackPadding);
-  };
 
   // A selected label is drawn inverted -- white letters on a black fill of the
   // same shape as its border -- so it reads as the current choice.
   if (gpio.deviceIsX3()) {
-    // X3 layout: Up on left side, Down on right side, positioned higher
-    // The physical buttons don't move: the original minButtonHeight-tall box
-    // started at y=155, so that's where its centre sat. A taller box grows
-    // symmetrically around that centre (not downward from y=155), so the
-    // label stays centred on the button.
-    constexpr int x3ButtonCenterY = 155 + minButtonHeight / 2;
+    // X3 layout: Up on left side, Down on right side, positioned higher --
+    // both boxes centred on x3ButtonCenterY (see its own comment above).
 
     if (topBtn != nullptr && topBtn[0] != '\0') {
-      const int height = boxHeightFor(topBtn);
+      const int height = sideButtonBoxHeight(renderer, topBtn);
       const int leftX = buttonMargin;
       const int top = x3ButtonCenterY - height / 2;
       if (topSelected) renderer.fillRect(leftX, top, buttonWidth, height);
@@ -229,7 +236,7 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
     }
 
     if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-      const int height = boxHeightFor(bottomBtn);
+      const int height = sideButtonBoxHeight(renderer, bottomBtn);
       const int rightX = screenWidth - buttonMargin - buttonWidth;
       const int top = x3ButtonCenterY - height / 2;
       if (bottomSelected) renderer.fillRect(rightX, top, buttonWidth, height);
@@ -241,8 +248,8 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
     // X4 layout: Both buttons stacked on right side
     constexpr int topButtonY = 345;
     const int x = screenWidth - buttonMargin - buttonWidth;
-    const int topHeight = boxHeightFor(topBtn);
-    const int bottomHeight = boxHeightFor(bottomBtn);
+    const int topHeight = sideButtonBoxHeight(renderer, topBtn);
+    const int bottomHeight = sideButtonBoxHeight(renderer, bottomBtn);
     // The two boxes adjoin (no gap), sharing one border line where the first
     // one's own (variable) height ends.
     const int bottomTop = topButtonY + topHeight;
@@ -269,6 +276,18 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
                                stackLineAdvance, /*black=*/!bottomSelected);
     }
   }
+}
+
+int BaseTheme::getSideButtonHintsBottom(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
+  // Only the X3 has the two buttons on opposite edges at one shared height, so
+  // only there is there a single line the content can sit below. The X4 stacks
+  // them one under the other on a single side, far lower down.
+  if (gpio.hasTouch() || !gpio.deviceIsX3()) {
+    return 0;
+  }
+  const int tallest = std::max(sideButtonBoxHeight(renderer, topBtn), sideButtonBoxHeight(renderer, bottomBtn));
+  const int top = x3ButtonCenterY - tallest / 2;
+  return top + tallest;
 }
 
 int BaseTheme::getListRowStep(bool hasSubtitle) const {
