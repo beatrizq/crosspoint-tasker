@@ -11,7 +11,8 @@ namespace habitTabModel {
 bool matchesArea(const std::string& areaId, const size_t cacheIndex) {
   const auto& habits = HABITIFY_HABITS.getHabits();
   if (cacheIndex >= habits.size()) return false;
-  if (areaId.empty()) return true;  // All
+  if (areaId.empty() || isLogsAreaId(areaId)) return false;
+  if (areaId == NO_AREA_ID) return habits[cacheIndex].areaId.empty();
   return habits[cacheIndex].areaId == areaId;
 }
 
@@ -74,16 +75,16 @@ int cacheIndexForRow(const std::string& areaId, const int row) {
 int rebuildVisibleAreas(const std::string& wanted, std::vector<std::string>& visibleAreaIds) {
   visibleAreaIds.clear();
   visibleAreaIds.reserve(HABITIFY_HABITS.getAreas().size() + 2);
-  // All always shows: it is every habit regardless of area, and the one tab a
-  // successful sync cannot leave empty. The rest earn their place by having a
-  // habit, same as the Tasks date tabs.
-  visibleAreaIds.push_back("");
+  // Each area earns its place by having a habit, same as the Tasks date tabs.
   for (const auto& area : HABITIFY_HABITS.getAreas()) {
     if (countForArea(area.id) > 0) visibleAreaIds.push_back(area.id);
   }
-  // Logs always shows too, same as All -- it's a log view, not a filter, so an
-  // empty state ("nothing completed today yet") is itself useful feedback
-  // rather than noise to hide.
+  // With no All tab to catch them, habits assigned to no area get a tab of
+  // their own -- only when there are any.
+  if (countForArea(NO_AREA_ID) > 0) visibleAreaIds.push_back(NO_AREA_ID);
+  // Logs always shows -- it's a log view, not a filter, so an empty state
+  // ("nothing completed today yet") is itself useful feedback rather than
+  // noise to hide.
   visibleAreaIds.push_back(LOGS_AREA_ID);
 
   for (size_t i = 0; i < visibleAreaIds.size(); i++) {
@@ -94,7 +95,7 @@ int rebuildVisibleAreas(const std::string& wanted, std::vector<std::string>& vis
 
 const char* tabLabel(const std::string& areaId) {
   if (isLogsAreaId(areaId)) return tr(STR_LOGS);
-  if (areaId.empty()) return tr(STR_HABITS_TAB_ALL);
+  if (areaId == NO_AREA_ID) return tr(STR_HABITS_TAB_NO_AREA);
   return HABITIFY_HABITS.getAreaName(areaId);
 }
 

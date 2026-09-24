@@ -13,6 +13,7 @@
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "activities/network/FileTransferReturn.h"
 #include "util/HomeAppOrder.h"
 #include "util/ScreenshotInfo.h"
 
@@ -114,7 +115,7 @@ class ActivityManager {
   // returnToReadMenu routes that screen's own Back button to ReadMenuActivity
   // instead of Home -- set only by ReadMenuActivity itself, since every other
   // caller of these four still expects Back to land on Home as before.
-  void goToFileTransfer(bool returnToReadMenu = false);
+  void goToFileTransfer(FileTransferReturn returnTo = FileTransferReturn::Home);
   void goToSettings();
   void goToFileBrowser(std::string path = {}, bool returnToReadMenu = false);
   void goToRecentBooks(bool returnToReadMenu = false);

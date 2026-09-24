@@ -50,11 +50,9 @@ void HabitsActivity::onEnter() {
   // onEnter()'s default selection (row 0) rather than landing on nothing.
   if (targetCacheIndex < 0 || !habitTabModel::isVisible(static_cast<size_t>(targetCacheIndex))) return;
 
-  // All (always visibleAreaIds[0]) matches everything, so it is only used as
-  // the fallback -- a more specific tab, when the habit's area still has one,
-  // is where it actually belongs.
+  // The tab whose area holds the habit, else the first tab.
   int targetTab = 0;
-  for (size_t t = 1; t < visibleAreaIds.size(); t++) {
+  for (size_t t = 0; t < visibleAreaIds.size(); t++) {
     if (habitTabModel::matchesArea(visibleAreaIds[t], static_cast<size_t>(targetCacheIndex))) {
       targetTab = static_cast<int>(t);
       break;
@@ -74,8 +72,8 @@ void HabitsActivity::onEnter() {
 const char* HabitsActivity::screenTitle() const { return homeAppOrder::displayName(homeAppOrder::AppId::Habits); }
 
 const std::string& HabitsActivity::areaIdAt(const int index) const {
-  static const std::string kAll;
-  if (index < 0 || static_cast<size_t>(index) >= visibleAreaIds.size()) return kAll;
+  static const std::string kNone;
+  if (index < 0 || static_cast<size_t>(index) >= visibleAreaIds.size()) return kNone;
   return visibleAreaIds[static_cast<size_t>(index)];
 }
 
@@ -86,7 +84,7 @@ void HabitsActivity::rebuildTabs() {
   // rebuild even though its index may move when a tab ahead of it appears or
   // goes (an area renamed or deleted in Habitify itself, say).
   const std::string wanted = currentAreaId();
-  // Falls back to All when the selected area just emptied or was removed.
+  // Falls back to the first tab when the selected area just emptied or was removed.
   setTab(habitTabModel::rebuildVisibleAreas(wanted, visibleAreaIds));
 
   // The new tab's list can be shorter than the old one, so the row selection

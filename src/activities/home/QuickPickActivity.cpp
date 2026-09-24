@@ -213,7 +213,7 @@ void QuickPickActivity::onEnter() {
   idleVariant = static_cast<uint8_t>(esp_random() % companion::IDLE_BUBBLE_VARIANT_COUNT);
   taskSelectedRow = 0;
   habitSelectedRow = 0;
-  // Always Tasks on entry, and Habits at its own first tab (All) if it's
+  // Always Tasks on entry, and Habits at its own first tab if it's
   // switched to later.
   section = Section::Tasks;
   activeAreaId.clear();

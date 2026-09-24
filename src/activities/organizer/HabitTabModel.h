@@ -14,9 +14,11 @@ struct HabitifyHabit;
  *
  * Tabs are keyed by Habitify area id (an open-ended string: areas are the
  * user's own data, not a set this app defines) rather than a fixed enum:
- * "" is the leading All tab, LOGS_AREA_ID the trailing Logs tab, and anything
- * else a real area. A caller owns its own `visibleAreaIds` vector and maps
- * tab indexes through it, same convention as TaskTabModel's `visibleTabs`.
+ * NO_AREA_ID is the tab for habits assigned to no area, LOGS_AREA_ID the
+ * trailing Logs tab, and anything else a real area. There is no All tab; ""
+ * is only ever "nothing chosen yet", which resolves to the first tab. A caller
+ * owns its own `visibleAreaIds` vector and maps tab indexes through it, same
+ * convention as TaskTabModel's `visibleTabs`.
  */
 namespace habitTabModel {
 
@@ -28,6 +30,10 @@ inline constexpr const char* LOGS_AREA_ID = "\x01__logs__";
 
 inline bool isLogsAreaId(const std::string& areaId) { return areaId == LOGS_AREA_ID; }
 
+// The same kind of sentinel for habits assigned to no area (their areaId is
+// empty), so they stay reachable without an All tab to catch them.
+inline constexpr const char* NO_AREA_ID = "\x01__none__";
+
 // Manual log entry is capped well above anything worth tapping through by hand;
 // a habit that legitimately needs more than this in one sitting is not what
 // these screens are for. Shared by the real Habits screen and the embedded
@@ -37,7 +43,8 @@ inline constexpr int LOG_SMALL_STEP = 1;
 inline constexpr int LOG_LARGE_STEP = 5;
 
 // Whether the habit at `cacheIndex` (HABITIFY_HABITS.getHabits()) belongs to
-// `areaId`. "" (All) matches every habit; anything else only that area's own.
+// `areaId`: a real area id matches that area's own habits, NO_AREA_ID the ones
+// with no area. Never true for "" or LOGS_AREA_ID.
 bool matchesArea(const std::string& areaId, size_t cacheIndex);
 
 // Whether the habit at `cacheIndex` is shown at all: the "hide completed"
@@ -62,9 +69,9 @@ int cacheIndexForRow(const std::string& areaId, int row);
 // order), or -1 out of range.
 int logEntryIndexForRow(int row);
 
-// Recomputes which area tabs have habits into `visibleAreaIds` (All and Logs
-// always show; an area only when countForArea() > 0), keeping `wanted`
-// selected where it survives and falling back to index 0 (All) otherwise --
+// Recomputes which area tabs have habits into `visibleAreaIds` (an area, or
+// NO_AREA_ID, only when countForArea() > 0; Logs always shows), keeping
+// `wanted` selected where it survives and falling back to index 0 otherwise --
 // e.g. an area deleted in Habitify itself since the last sync. Returns the
 // index `wanted` (or that fallback) landed at.
 int rebuildVisibleAreas(const std::string& wanted, std::vector<std::string>& visibleAreaIds);

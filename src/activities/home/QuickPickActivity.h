@@ -58,7 +58,7 @@
  * where it's shown, without leaving to the real screen. The side Up/Down
  * buttons (labelled Tasks/Habits, see below) swap that whole section for a
  * scaled-down rendering of the real *Habits* screen -- under the same rule,
- * its area tab bar (All / one per Habitify area / Logs, see
+ * its area tab bar (one per Habitify area / No area / Logs, see
  * activities/organizer/HabitTabModel.h, shared with HabitsActivity the same
  * way TaskTabModel is with TasksActivity) and habit rows -- in the same
  * space. Tasks is the default on every entry. Note that this screen has no
@@ -265,10 +265,10 @@ class QuickPickActivity final : public Activity {
   // comment).
   std::vector<taskTabModel::TaskTabKind> visibleTabs{taskTabModel::TaskTabKind::OVERDUE};
   taskTabModel::TaskTabKind activeKind = taskTabModel::TaskTabKind::OVERDUE;
-  // The Habits section's equivalents: the area ids of the tabs on screen (""
-  // is All, habitTabModel::LOGS_AREA_ID the trailing Logs tab) and which one
-  // is active. "" -- All -- is the default, the same first tab HabitsActivity
-  // opens on.
+  // The Habits section's equivalents: the area ids of the tabs on screen
+  // (habitTabModel::NO_AREA_ID for habits with no area, LOGS_AREA_ID the
+  // trailing Logs tab) and which one is active. "" means nothing chosen yet,
+  // which resolves to the first tab, the same one HabitsActivity opens on.
   std::vector<std::string> visibleAreaIds{""};
   std::string activeAreaId;
   // While focus == Embedded: whether the tab bar itself, not a row, has the

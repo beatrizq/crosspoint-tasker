@@ -16,6 +16,7 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "util/OrganizerSleepScreen.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
@@ -53,12 +54,6 @@ void SleepActivity::onEnter() {
       return renderBlankSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
       return renderCustomSleepScreen();
-    // DYNAMIC's own capture (ActivityManager::goToSleep()) writes to the same
-    // /sleep.bmp CUSTOM reads from, so the two render identically -- except
-    // DYNAMIC also overlays the "Sleep screen" label bar (see
-    // renderCustomSleepScreen()'s own doc comment for why).
-    case (CrossPointSettings::SLEEP_SCREEN_MODE::DYNAMIC):
-      return renderCustomSleepScreen(true);
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
       return renderCoverSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM):
@@ -72,20 +67,22 @@ void SleepActivity::onEnter() {
   }
 }
 
-void SleepActivity::renderCustomSleepScreen(const bool showSleepLabel) const {
+void SleepActivity::renderCustomSleepScreen() const {
   // Check if we have a /.sleep (preferred) or /sleep directory
   const char* sleepDir = nullptr;
   auto dir = Storage.open("/.sleep");
 
-  // Look for sleep.bmp on the root of the sd card to determine if we should
-  // render a custom sleep screen instead of the default.
-  // This takes priority over the /sleep folder.
-  HalFile file;
-  if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
+  // A wallpaper picked in the image viewer ("Set Cover") wins, then the user's
+  // own sleep.bmp on the root of the sd card -- either one takes priority over
+  // the /sleep folder. They are separate files so that picking a wallpaper
+  // never overwrites sleep.bmp.
+  for (const char* path : {organizerSleepScreen::WALLPAPER_PATH, "/sleep.bmp"}) {
+    HalFile file;
+    if (!Storage.openFileForRead("SLP", path, file)) continue;
     Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-      LOG_DBG("SLP", "Loading: /sleep.bmp");
-      renderBitmapSleepScreen(bitmap, showSleepLabel);
+      LOG_DBG("SLP", "Loading: %s", path);
+      renderBitmapSleepScreen(bitmap);
       file.close();
       if (dir) dir.close();
       return;
@@ -187,7 +184,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool showSleepLabel) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   int x, y;
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -239,17 +236,6 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool sho
     renderer.invertScreen();
   }
 
-  // Only the plain (non-greyscale) path below: the greyscale composite that
-  // follows redraws the bitmap from scratch into its own separate buffers
-  // (rewindToData()+clearScreen() per pass), which would wipe this label
-  // right back out before displayGrayBuffer() ever runs. A DYNAMIC capture is
-  // always a plain 1-bit screenshot of the framebuffer (see
-  // ActivityManager::goToSleep()), never a greyscale-tagged bitmap, so this
-  // never actually applies to the one caller that passes showSleepLabel=true.
-  if (showSleepLabel && !hasGreyscale) {
-    drawSleepScreenLabel();
-  }
-
   if (hasGreyscale) {
     // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is
     // calibrated against the pixel state the single-pass HALF waveform leaves
@@ -279,10 +265,6 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool sho
 }
 
 void SleepActivity::renderCoverSleepScreen() const {
-  // A plain function (not a member-function pointer, now that
-  // renderCustomSleepScreen() and renderDefaultSleepScreen() no longer share
-  // a signature): COVER_CUSTOM's fallback is never a DYNAMIC capture, so it
-  // always passes showSleepLabel's default (false).
   const bool useCustomFallback = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM;
   auto renderNoCoverSleepScreen = [this, useCustomFallback] {
     if (useCustomFallback) {
@@ -375,19 +357,4 @@ void SleepActivity::renderLastScreenSleepScreen() const {
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-}
-
-void SleepActivity::drawSleepScreenLabel() const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int pageWidth = renderer.getScreenWidth();
-  const int pageHeight = renderer.getScreenHeight();
-  const int barHeight = metrics.buttonHintsHeight;
-  const int barY = pageHeight - barHeight;
-
-  // Solid black bar over whatever the captured screen's own (now-inert)
-  // button-hints row was showing, "Sleep screen" centered in white on top --
-  // see this method's own declaration for why only DYNAMIC draws this.
-  renderer.fillRect(0, barY, pageWidth, barHeight);
-  const int textY = barY + (barHeight - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-  renderer.drawCenteredText(UI_10_FONT_ID, textY, tr(STR_SLEEP_SCREEN_LABEL), false);
 }

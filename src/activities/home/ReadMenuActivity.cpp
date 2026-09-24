@@ -55,7 +55,7 @@ void ReadMenuActivity::activateSelected() {
       activityManager.goToBrowser(/*returnToReadMenu=*/true);
       break;
     case HomeMenuItem::FILE_TRANSFER:
-      activityManager.goToFileTransfer(/*returnToReadMenu=*/true);
+      activityManager.goToFileTransfer(FileTransferReturn::ReadMenu);
       break;
     default:
       break;

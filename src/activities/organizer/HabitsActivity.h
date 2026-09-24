@@ -25,7 +25,7 @@
  * request per habit however many separate amounts were logged in between,
  * before the journal is re-fetched.
  *
- * Tabs are one per Habitify Area that has a habit in it, plus a leading All --
+ * Tabs are one per Habitify Area that has a habit in it, plus one for habits with no area --
  * the same "built from what is actually there" shape TasksActivity's tabs
  * have, but keyed by an open-ended area id rather than a fixed enum: areas are
  * the user's own data, not a set this app defines. The tab set and row
@@ -76,7 +76,7 @@ class HabitsActivity final : public OrganizerScreenActivity {
  private:
   bool isLogsTab(int index) const { return habitTabModel::isLogsAreaId(areaIdAt(index)); }
 
-  // The area id at `index`, or "" (All) when out of range.
+  // The area id at `index`, or "" (no tab) when out of range.
   const std::string& areaIdAt(int index) const;
   // The area id the active tab holds.
   const std::string& currentAreaId() const { return areaIdAt(tab()); }
@@ -88,7 +88,7 @@ class HabitsActivity final : public OrganizerScreenActivity {
   void clearSelectedLogRow();
 
   // Recomputes which area tabs have habits, keeping the active area selected
-  // where it survives and falling back to All where it does not (e.g. an area
+  // where it survives and falling back to the first tab where it does not (e.g. an area
   // deleted in Habitify itself since the last sync).
   void rebuildTabs();
 
@@ -99,7 +99,7 @@ class HabitsActivity final : public OrganizerScreenActivity {
   // See the constructor comment. Consumed and cleared in onEnter().
   std::string selectHabitId;
 
-  // Tabs currently on screen, in display order. Always leads with "" (All).
+  // Tabs currently on screen, in display order. Empty until the first rebuildTabs().
   std::vector<std::string> visibleAreaIds{""};
 
   // Select opens this first, rather than completeSelectedHabit() directly --

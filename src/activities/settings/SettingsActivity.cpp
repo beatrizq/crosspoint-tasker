@@ -103,6 +103,7 @@ void SettingsActivity::rebuildSettingsLists() {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_FILE_TRANSFER, SettingAction::FileTransfer));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   readerSettings.insert(readerSettings.begin(),
                         SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
@@ -490,6 +491,11 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::SdFirmwareUpdate:
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::FileTransfer:
+        // Replaces this screen rather than running as a sub-activity, like every
+        // other entry into File Transfer; it comes back to Settings on exit.
+        activityManager.goToFileTransfer(FileTransferReturn::Settings);
         break;
       case SettingAction::DownloadFonts:
         startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),

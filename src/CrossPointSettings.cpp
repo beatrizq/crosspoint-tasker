@@ -180,6 +180,15 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
   }
 
+  // The Dynamic sleep screen (mode 7) was removed; Quick Resume is its closest
+  // replacement, so a device saved on it lands there rather than resetting to
+  // the default via the enum clamp above.
+  constexpr uint8_t LEGACY_SLEEP_SCREEN_DYNAMIC = 7;
+  if (!doc["sleepScreen"].isNull() && (doc["sleepScreen"] | (uint8_t)0) == LEGACY_SLEEP_SCREEN_DYNAMIC) {
+    sleepScreen = QUICK_RESUME;
+    needsResave = true;
+  }
+
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)SLEEP_10_MIN, SLEEP_TIMEOUT_COUNT, (uint8_t)SLEEP_10_MIN);

@@ -88,10 +88,16 @@ void CrossPointWebServerActivity::onEnter() {
 }
 
 void CrossPointWebServerActivity::exitActivity() {
-  if (returnToReadMenu) {
-    activityManager.goToReadMenu();
-  } else {
-    onGoHome();
+  switch (returnTo) {
+    case FileTransferReturn::ReadMenu:
+      activityManager.goToReadMenu();
+      break;
+    case FileTransferReturn::Settings:
+      activityManager.goToSettings();
+      break;
+    case FileTransferReturn::Home:
+      onGoHome();
+      break;
   }
 }
 
@@ -480,7 +486,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(SMALL_FONT_ID, startY, hostnameUrl.c_str(), true);
   }
 
-  const auto labels = mappedInput.mapLabels(returnToReadMenu ? tr(STR_BACK) : tr(STR_EXIT), "", "", "");
+  const auto labels =
+      mappedInput.mapLabels(returnTo != FileTransferReturn::Home ? tr(STR_BACK) : tr(STR_EXIT), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

@@ -21,15 +21,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     COVER_CUSTOM = 4,
     BLANK = 5,
     QUICK_RESUME = 6,
-    // Captures whatever screen the device was actually showing right before
-    // it went to sleep -- see ActivityManager::goToSleep(), which writes the
-    // outgoing screen's own framebuffer to /sleep.bmp before replacing it
-    // with SleepActivity, the same file and format CUSTOM already renders
-    // from (see SleepActivity::renderCustomSleepScreen()). Replaces the old
-    // per-app "Sleep Screen App" picker (Settings -> Organizer), which only
-    // ever snapshotted one of four organizer screens' own first tab, and only
-    // opportunistically, whenever that screen's own data changed.
-    DYNAMIC = 7,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };

@@ -5,27 +5,22 @@
 /**
  * Installs a user-picked image as the sleep screen's Custom wallpaper.
  *
- * /sleep.bmp is what SleepActivity's CUSTOM (and DYNAMIC, which renders the
- * same way -- see SleepActivity::renderCustomSleepScreen()) mode displays.
- * This is the write side of it for a file the user explicitly chose, used by
- * the image viewer's "Set Cover" action.
- *
- * Used to also cover an organizer app repainting /sleep.bmp on its own,
- * opportunistically, whenever its contents changed (Settings -> Organizer ->
- * Sleep Screen App) -- replaced by DYNAMIC mode capturing whatever screen the
- * device actually was on right before sleeping (see
- * ActivityManager::goToSleep()), so that mechanism and the backup/revert
- * machinery it needed (to hand a picked wallpaper back after an app
- * screenshot had overwritten it) are gone rather than dead code kept around.
+ * The image is copied to WALLPAPER_PATH, not /sleep.bmp: SleepActivity's
+ * CUSTOM mode shows the wallpaper when it exists and falls back to the user's
+ * own /sleep.bmp, so picking an image from the viewer ("Set Cover") never
+ * overwrites a sleep.bmp the user put on the card themselves. To go back to
+ * sleep.bmp, delete the wallpaper file.
  */
 namespace organizerSleepScreen {
 
+// Where the picked wallpaper lives, next to the app's own settings.
+inline constexpr char WALLPAPER_PATH[] = "/.crosspoint/sleep_cover.bmp";
+
 /**
- * Copies sourcePath to /sleep.bmp as the sleep wallpaper and switches the
- * sleep mode to CUSTOM.
+ * Copies sourcePath to WALLPAPER_PATH and switches the sleep mode to CUSTOM.
  *
- * Returns false, leaving /sleep.bmp untouched, if sourcePath could not be read
- * or the copy failed part-way.
+ * Returns false if sourcePath could not be read or the copy failed part-way.
+ * /sleep.bmp is never touched either way.
  */
 bool installCustomWallpaper(const std::string& sourcePath);
 
