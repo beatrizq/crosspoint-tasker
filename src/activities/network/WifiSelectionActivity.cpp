@@ -737,7 +737,7 @@ void WifiSelectionActivity::loop() {
       Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
       const int contentTop =
           screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-      const int contentHeight = screen.height - contentTop - metrics.verticalSpacing * 2;
+      const int contentHeight = screen.height - contentTop - metrics.buttonHintsGap;
       int touchSel = static_cast<int>(selectedNetworkIndex);
       const auto listTouch =
           handleListTouch(touchSel, static_cast<int>(networks.size()), contentTop, contentHeight, false);
@@ -856,7 +856,7 @@ void WifiSelectionActivity::renderNetworkList(const Rect* screen, const ThemeMet
   } else {
     int contentTop =
         screen->y + metrics->topPadding + metrics->headerHeight + metrics->tabBarHeight + metrics->verticalSpacing;
-    int contentHeight = screen->height - contentTop - metrics->verticalSpacing * 2;
+    int contentHeight = screen->height - contentTop - metrics->buttonHintsGap;
     GUI.drawList(
         renderer, Rect{screen->x, contentTop, screen->width, contentHeight}, static_cast<int>(networks.size()),
         selectedNetworkIndex,

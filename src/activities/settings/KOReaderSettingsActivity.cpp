@@ -44,7 +44,7 @@ void KOReaderSettingsActivity::loop() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
   int touchSel = static_cast<int>(selectedIndex);
   const auto listTouch = handleListTouch(touchSel, MENU_ITEMS, contentTop, contentHeight, false);
   if (listTouch != ListTouchResult::None) {
@@ -153,7 +153,7 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KOREADER_SYNC));
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEMS),
       static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr,

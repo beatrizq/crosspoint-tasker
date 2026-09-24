@@ -107,7 +107,7 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
   UITheme::drawCenteredText(renderer, safe, UI_12_FONT_ID, titleY, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
   UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, subtitleY, tr(STR_EOB_CONTINUE_WITH));
 
-  const int listHeight = safe.y + safe.height - listTop - metrics.verticalSpacing;
+  const int listHeight = safe.y + safe.height - listTop - metrics.buttonHintsGap;
   GUI.drawList(renderer, Rect{safe.x, listTop, safe.width, listHeight}, static_cast<int>(names.size()) + 1, selector,
                [this](const int index) {
                  return index < static_cast<int>(names.size()) ? displayName(names[index])

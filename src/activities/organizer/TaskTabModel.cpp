@@ -70,7 +70,7 @@ int logEntryIndexForRow(const int row) {
   return row;
 }
 
-bool rowsHaveSubtitle(const TaskTabKind kind) { return kind != TaskTabKind::TODAY && kind != TaskTabKind::NO_DATE; }
+bool rowsHaveSubtitle(const TaskTabKind kind) { return kind == TaskTabKind::UPCOMING || kind == TaskTabKind::LOGS; }
 
 int rebuildVisibleTabs(const TaskTabKind wanted, std::vector<TaskTabKind>& visibleTabs) {
   visibleTabs.clear();

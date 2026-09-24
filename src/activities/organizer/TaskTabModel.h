@@ -45,10 +45,10 @@ int taskCacheIndexForRow(TaskTabKind kind, int row);
 // row `row`, or -1 out of range. Meaningful only under LOGS.
 int logEntryIndexForRow(int row);
 
-// Whether a row under `kind` draws a second, dimmed line -- the due date for
-// the real kinds (skipped on TODAY, where it would just repeat the tab's own
-// name, and NO_DATE, where there is no date), or the Cached/Synced tag for
-// LOGS.
+// Whether a row under `kind` draws a second, dimmed line -- the due date on
+// UPCOMING, the one tab where it says something the tab's own name doesn't
+// (OVERDUE and TODAY are already a date range, and NO_DATE has none), or the
+// Cached/Synced tag for LOGS.
 bool rowsHaveSubtitle(TaskTabKind kind);
 
 // Recomputes which tabs currently have rows into `visibleTabs` (LOGS always

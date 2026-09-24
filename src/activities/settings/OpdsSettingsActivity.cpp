@@ -51,7 +51,7 @@ void OpdsSettingsActivity::loop() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.tabBarHeight;
   const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
   const int menuItems = getMenuItemCount();
 
   int touchSel = static_cast<int>(selectedIndex);
@@ -195,7 +195,7 @@ void OpdsSettingsActivity::render(RenderLock&&) {
                     tr(STR_CALIBRE_URL_HINT));
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.tabBarHeight;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
   const int menuItems = getMenuItemCount();
 
   const StrId fieldNames[] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL, StrId::STR_USERNAME,

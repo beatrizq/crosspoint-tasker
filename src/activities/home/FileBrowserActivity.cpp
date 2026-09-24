@@ -215,7 +215,7 @@ void FileBrowserActivity::loop() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap - pathReserved;
 
   auto activateSelected = [this] {
     if (lockNextConfirmRelease) {
@@ -438,8 +438,7 @@ void FileBrowserActivity::render(RenderLock&&) {
   const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   const int pathReserved = pathLineHeight + metrics.verticalSpacing;
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight =
-      pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap - pathReserved;
   if (files.empty()) {
     const char* emptyMsg = (mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND);
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
@@ -453,7 +452,7 @@ void FileBrowserActivity::render(RenderLock&&) {
 
   // Full path display
   {
-    const int pathY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - pathLineHeight;
+    const int pathY = pageHeight - metrics.buttonHintsHeight - metrics.buttonHintsGap - pathLineHeight;
     const int separatorY = pathY - metrics.verticalSpacing / 2;
     renderer.drawLine(0, separatorY, pageWidth - 1, separatorY, 3, true);
     const int pathMaxWidth = pageWidth - metrics.contentSidePadding * 2;

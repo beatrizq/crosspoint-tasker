@@ -47,7 +47,7 @@ void RecentBooksActivity::loop() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   // After a long-press has fired, swallow input until Confirm is physically released
   // (so the release doesn't also open the book; re-arm only once the button is up).
@@ -197,7 +197,7 @@ void RecentBooksActivity::render(RenderLock&&) {
   }
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   // Recent tab
   if (recentBooks.empty()) {

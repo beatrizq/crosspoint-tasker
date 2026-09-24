@@ -219,7 +219,7 @@ void CompanionSettingsActivity::loop() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   switch (handleListTouch(selectedIndex, MENU_ITEMS, contentTop, contentHeight, false)) {
     case ListTouchResult::Activated:
@@ -255,7 +255,7 @@ void CompanionSettingsActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_COMPANION), nullptr);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, MENU_ITEMS, selectedIndex,

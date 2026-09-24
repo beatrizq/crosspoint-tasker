@@ -913,10 +913,9 @@ void QuickPickActivity::renderTasksTab(const int top, const int height) const {
     return;
   }
 
-  // Title + a dimmed second line -- the due date for the five real kinds
-  // (skipped on Today/No date, see TaskTabModel::rowsHaveSubtitle()'s own
-  // comment), or the Cached/Synced tag for Logs -- the same two-line style
-  // the real Tasks screen itself uses, following SETTINGS.organizerFontSize.
+  // Title, plus a dimmed second line only where TaskTabModel::rowsHaveSubtitle()
+  // says so (the due date on Upcoming, the Cached/Synced tag on Logs) -- the
+  // same rows the real Tasks screen draws, following SETTINGS.organizerFontSize.
   const int titleFont = taskRowTitleFontId();
   const int subtitleFont = taskRowSubtitleFontId();
   const bool hasSubtitle = taskTabModel::rowsHaveSubtitle(activeKind);
@@ -1249,7 +1248,7 @@ void QuickPickActivity::render(RenderLock&&) {
   // SELECTION_BOX_PADDING here, not metrics.verticalSpacing: a tighter gap
   // than the old, larger vertical spacing this replaced.
   const int contentTop = glanceStripTop + glanceStripHeight + SELECTION_BOX_PADDING;
-  const int contentBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentBottom = pageHeight - metrics.buttonHintsHeight - metrics.buttonHintsGap;
   const int totalContentHeight = contentBottom - contentTop;
   const int contentWidth = pageWidth - MARGIN * 2;
   const int maxTextWidth = contentWidth - PAD * 2;

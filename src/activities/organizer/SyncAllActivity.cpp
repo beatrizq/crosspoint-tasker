@@ -185,7 +185,7 @@ void SyncAllActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SYNC_ALL), nullptr);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   if (nothingToDo) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_SYNC_ALL_NOTHING));

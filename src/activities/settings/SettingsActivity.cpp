@@ -230,7 +230,7 @@ void SettingsActivity::loop() {
   const int listTop = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
   const int listHeight =
       renderer.getScreenHeight() - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
-                                    metrics.buttonHintsHeight + metrics.verticalSpacing * 2);
+                                    metrics.buttonHintsHeight + metrics.buttonHintsGap);
   auto buildTabs = [&]() {
     std::vector<TabInfo> tabs;
     tabs.reserve(categoryCount);
@@ -303,7 +303,7 @@ void SettingsActivity::loop() {
   const auto& navMetrics = UITheme::getInstance().getMetrics();
   const int settingsListHeight =
       renderer.getScreenHeight() - (navMetrics.topPadding + navMetrics.headerHeight + navMetrics.tabBarHeight +
-                                    navMetrics.buttonHintsHeight + navMetrics.verticalSpacing * 2);
+                                    navMetrics.buttonHintsHeight + navMetrics.buttonHintsGap);
   const int settingsPageItems = GUI.getListPageItems(settingsListHeight, false);
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
@@ -601,7 +601,7 @@ void SettingsActivity::render(RenderLock&&) {
       renderer,
       Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
            pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
-                         metrics.verticalSpacing * 2)},
+                         metrics.buttonHintsGap)},
       settingsCount, headerFocused ? -1 : selectedSettingIndex - 1,
       [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
       [&settings](int i) {

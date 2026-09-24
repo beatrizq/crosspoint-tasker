@@ -160,7 +160,7 @@ void BleNotificationsActivity::loop() {
                         std::max(6, renderer.getLineHeight(titleFontId()) * 2 / 5);
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
   const int pageItems = std::max(1, contentHeight / std::max(1, rowHeight));
 
   int touchSel = static_cast<int>(selectorIndex);
@@ -233,7 +233,7 @@ void BleNotificationsActivity::render(RenderLock&&) {
   }
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   const size_t count = BLE_NOTIFICATIONS.getCount();
   if (count == 0) {

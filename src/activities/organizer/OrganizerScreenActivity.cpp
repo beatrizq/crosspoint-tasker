@@ -104,7 +104,7 @@ int OrganizerScreenActivity::listTop() const {
 
 int OrganizerScreenActivity::listHeight() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  return renderer.getScreenHeight() - listTop() - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  return renderer.getScreenHeight() - listTop() - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 }
 
 int OrganizerScreenActivity::pageItems() const { return std::max(1, listHeight() / std::max(1, listRowHeight())); }

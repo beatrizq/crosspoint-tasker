@@ -81,6 +81,8 @@ struct ThemeMetrics {
   int homeGridTileHeight;
 
   int buttonHintsHeight;
+  // Vertical gap between the bottom of a screen's content and the front button hints.
+  int buttonHintsGap;
   int sideButtonHintsWidth;
 
   int progressBarHeight;
@@ -177,6 +179,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .homeShowsCoverCard = true,
                                  .homeMenuTopOffset = 10,
                                  .buttonHintsHeight = 40,
+                                 .buttonHintsGap = 8,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
                                  .progressBarMarginTop = 1,

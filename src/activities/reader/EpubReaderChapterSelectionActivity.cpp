@@ -55,7 +55,7 @@ void EpubReaderChapterSelectionActivity::loop() {
   auto metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
+  const int contentHeight = screen.height - contentTop - metrics.buttonHintsGap;
   switch (handleListTouch(selectorIndex, totalItems, contentTop, contentHeight, false)) {
     case ListTouchResult::Activated:
       selectChapter();
@@ -113,7 +113,7 @@ void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
                  tr(STR_SELECT_CHAPTER));
 
   const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
+  const int contentHeight = screen.height - contentTop - metrics.buttonHintsGap;
 
   const int totalItems = getTotalItems();
   GUI.drawList(renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, totalItems, selectorIndex,

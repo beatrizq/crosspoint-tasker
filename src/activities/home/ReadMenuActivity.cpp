@@ -229,7 +229,7 @@ void ReadMenuActivity::render(RenderLock&&) {
                           [] { return false; });
   contentTop += metrics.homeCoverTileHeight + metrics.menuSpacing;
 
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   const auto& rows = entries;
   GUI.drawButtonMenu(

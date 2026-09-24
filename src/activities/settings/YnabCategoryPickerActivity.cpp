@@ -130,7 +130,7 @@ void YnabCategoryPickerActivity::loop() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   switch (handleListTouch(selectedIndex, itemCount, contentTop, contentHeight, false)) {
     case ListTouchResult::Activated:
@@ -177,7 +177,7 @@ void YnabCategoryPickerActivity::render(RenderLock&&) {
                  nullptr);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
   const int itemCount = static_cast<int>(categories.size());
 
   if (state == State::LOADING) {

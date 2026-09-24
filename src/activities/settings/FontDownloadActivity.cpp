@@ -473,7 +473,7 @@ void FontDownloadActivity::loop() {
       const auto& metrics = UITheme::getInstance().getMetrics();
       const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
       const int contentHeight =
-          renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+          renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
       switch (handleListTouch(selectedIndex_, listSize, contentTop, contentHeight, true)) {
         case ListTouchResult::Activated:
           activateSelected();
@@ -607,7 +607,7 @@ void FontDownloadActivity::render(RenderLock&&) {
     } else {
       GUI.drawList(
           renderer,
-          Rect{0, contentTop, pageWidth, pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing},
+          Rect{0, contentTop, pageWidth, pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap},
           listItemCount(), selectedIndex_,
           [this](int index) -> std::string {
             if (isDownloadAllRow(index)) {

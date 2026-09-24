@@ -81,7 +81,7 @@ int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader
   }
   if (hasButtonHints && orientation != GfxRenderer::Orientation::LandscapeClockwise &&
       orientation != GfxRenderer::Orientation::LandscapeCounterClockwise) {
-    reservedHeight += metrics.verticalSpacing + metrics.buttonHintsHeight;
+    reservedHeight += metrics.buttonHintsGap + metrics.buttonHintsHeight;
   }
   const int availableHeight = renderer.getScreenHeight() - reservedHeight - extraReservedHeight;
   return UITheme::getInstance().getTheme().getListPageItems(availableHeight, hasSubtitle);

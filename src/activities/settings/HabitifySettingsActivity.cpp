@@ -97,7 +97,7 @@ void HabitifySettingsActivity::loop() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   switch (handleListTouch(selectedIndex, MENU_ITEMS, contentTop, contentHeight, false)) {
     case ListTouchResult::Activated:
@@ -143,7 +143,7 @@ void HabitifySettingsActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_HABITIFY), nullptr);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   // Live values; the key itself is never shown, only whether one is stored.
   const std::string keyValue = HABITIFY_STORE.hasApiKey() ? std::string("******") : std::string(tr(STR_NOT_SET));

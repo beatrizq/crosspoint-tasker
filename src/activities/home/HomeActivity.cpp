@@ -481,7 +481,7 @@ void HomeActivity::loop() {
     const int columns = metrics.homeGridColumns;
     const int tileWidth = renderer.getScreenWidth() / columns;
     const int gridRows = (renderedMenuCount + columns - 1) / columns;
-    const int menuHeight = renderer.getScreenHeight() - gridTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+    const int menuHeight = renderer.getScreenHeight() - gridTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
     // The same step the theme drew with: the rows share whatever height is left.
     const int tileStep = GUI.getGridRowStep(menuHeight, renderedMenuCount);
     for (int column = 0; column < columns; column++) {
@@ -556,7 +556,7 @@ void HomeActivity::render(RenderLock&&) {
   const auto& rows = entries;
 
   const int gridTop = menuTop();
-  const int menuHeight = pageHeight - gridTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int menuHeight = pageHeight - gridTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   const Rect menuRect{0, gridTop, pageWidth, menuHeight};
   GUI.drawButtonGrid(
