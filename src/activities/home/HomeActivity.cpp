@@ -26,7 +26,6 @@
 #include "RecentBooksStore.h"
 #include "companion/CompanionRenderer.h"
 #include "companion/CompanionTracker.h"
-#include "companion/QuickPickRoll.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/HomeAppOrder.h"
@@ -120,10 +119,9 @@ void HomeActivity::buildEntries() {
     // identical across build flavors, but never rendered as a tile here.
     if (app.id == homeAppOrder::AppId::Notifications) continue;
 #endif
-    // Same runtime-gated treatment, just checked at runtime instead of build
-    // time: the companion is only ever a real tile when the user has turned
-    // it on.
-    if (app.id == homeAppOrder::AppId::Companion && !SETTINGS.companionEnabled) continue;
+    // Settings is reached by pressing Right1 instead (see loop()'s own
+    // comment) -- never a grid tile of its own any more.
+    if (app.id == homeAppOrder::AppId::Settings) continue;
     // The companion's label prefers its character's own built-in name over
     // this table's generic appName ("Companion") when no nickname is set --
     // see CompanionTracker::displayName() and AppId::Companion's own comment.
@@ -158,24 +156,7 @@ void HomeActivity::drawCompanionIcon(const Rect bounds) const {
 }
 
 void HomeActivity::activateCompanion() {
-  if (!SETTINGS.companionEnabled) return;
-
-  // Shows the suggestion already rolled for this Home visit -- no fresh roll
-  // here, see homeSuggestionText's own comment. The result handler folds back
-  // whatever QuickPickActivity ends up holding when it returns (its own
-  // Random action may have changed it), so a later re-activation is
-  // consistent with whatever was last seen on the full screen.
-  startActivityForResult(
-      std::make_unique<QuickPickActivity>(renderer, mappedInput, homeSuggestionText, homeSuggestionItemId,
-                                          homeSuggestionIsHabit, homeSuggestionPoolEmpty),
-      [this](const ActivityResult& result) {
-        if (const auto* pick = std::get_if<QuickPickResult>(&result.data)) {
-          homeSuggestionText = pick->text;
-          homeSuggestionItemId = pick->itemId;
-          homeSuggestionIsHabit = pick->isHabit;
-          homeSuggestionPoolEmpty = pick->poolEmpty;
-        }
-      });
+  startActivityForResult(std::make_unique<QuickPickActivity>(renderer, mappedInput), [](const ActivityResult&) {});
 }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
@@ -272,15 +253,9 @@ void HomeActivity::onEnter() {
   // so the first idle tick doesn't immediately redo what onEnter() just did.
   lastCompanionRefreshMs = millis();
   lastCompanionMood = COMPANION.currentMood();
-  // A different suggestion each visit, stable while the cursor moves around
-  // the menu -- see homeSuggestionText's own comment.
-  const auto rolled = quickpick::roll();
-  homeSuggestionText = rolled.text;
-  homeSuggestionItemId = rolled.itemId;
-  homeSuggestionIsHabit = rolled.isHabit;
-  homeSuggestionPoolEmpty = rolled.poolEmpty;
 
   selectorIndex = 0;
+  headerFocused = false;
   if (initialMenuItem != HomeMenuItem::NONE) {
     for (int i = 0; i < static_cast<int>(entries.size()); i++) {
       if (entries[i].item == initialMenuItem) {
@@ -411,22 +386,41 @@ void HomeActivity::loop() {
   };
 
   buttonNavigator.onNext([this, menuCount] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+    if (headerFocused) {
+      headerFocused = false;
+      selectorIndex = 0;
+    } else if (selectorIndex == menuCount - 1) {
+      headerFocused = true;
+    } else {
+      selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+    }
     requestUpdate();
   });
 
   buttonNavigator.onPrevious([this, menuCount] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+    if (headerFocused) {
+      headerFocused = false;
+      selectorIndex = menuCount - 1;
+    } else if (selectorIndex == 0) {
+      headerFocused = true;
+    } else {
+      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+    }
     requestUpdate();
   });
 
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
+    // A swipe is a page-jump, not a single step, so it always leaves the
+    // header stop (if it was focused) -- same reasoning as
+    // OrganizerScreenActivity's own swipe handling.
+    headerFocused = false;
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
     requestUpdate();
     return;
   }
   if (swipe == MappedInputManager::SwipeDir::Down) {
+    headerFocused = false;
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
     requestUpdate();
     return;
@@ -434,15 +428,13 @@ void HomeActivity::loop() {
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Right1)) backPressSeen = true;
 
-  // Back is otherwise unused on the home menu, and syncing every configured
-  // integration is an action on all of them at once, so no single tile owns
-  // it -- it lives here instead. Settings has its own tile now (see
-  // buildEntries()), so Back no longer needs to double as the way to reach
-  // it, and syncing no longer needs a hold to tell the two apart: a plain
-  // press is Sync All, full stop. backPressSeen guards against the stale
-  // release of the Back press that closed the previous activity.
+  // Back is otherwise unused on the home menu, so it doubles as the direct
+  // shortcut to Settings -- Settings no longer has a tile of its own (see
+  // buildEntries()). Sync All moves to Right2 while the header is focused
+  // instead (see below). backPressSeen guards against the stale release of
+  // the Back press that closed the previous activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Right1) && backPressSeen) {
-    activityManager.goToSyncAll();
+    onSettingsOpen();
     return;
   }
 
@@ -514,6 +506,10 @@ void HomeActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right2)) {
+    if (headerFocused) {
+      activityManager.goToSyncAll([] { activityManager.goHome(); });
+      return;
+    }
     activateSelection();
   }
 }
@@ -525,8 +521,15 @@ void HomeActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
+  const Rect headerRect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding};
+  GUI.drawHeader(renderer, headerRect,
                  metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
+  // Hovering the header (see headerFocused's own comment): a true pixel
+  // invert, the same technique QuickPickActivity's own header focus uses.
+  if (headerFocused) {
+    renderer.invertRect(headerRect.x, headerRect.y, headerRect.width,
+                        std::min(HEADER_FOCUS_HIGHLIGHT_HEIGHT, headerRect.height));
+  }
 
   // Themes whose cover card has moved to the top of the Read menu instead
   // (see ReadMenuActivity, which calls drawRecentBookCover() itself) don't
@@ -543,8 +546,8 @@ void HomeActivity::render(RenderLock&&) {
     coverRectH = metrics.homeCoverTileHeight;
 
     GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
-                            recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
-                            std::bind(&HomeActivity::storeCoverBuffer, this));
+                            recentBooks, headerFocused ? -1 : selectorIndex, coverRendered, coverBufferStored,
+                            bufferRestored, std::bind(&HomeActivity::storeCoverBuffer, this));
   }
 
   // The menu draws the entries the cover tile does not own.
@@ -557,7 +560,7 @@ void HomeActivity::render(RenderLock&&) {
 
   const Rect menuRect{0, gridTop, pageWidth, menuHeight};
   GUI.drawButtonGrid(
-      renderer, menuRect, renderedCount, selectorIndex - leadingRecents,
+      renderer, menuRect, renderedCount, headerFocused ? -1 : selectorIndex - leadingRecents,
       [&rows, leadingRecents](int index) {
         const char* label = rows[index + leadingRecents].label;
         return std::string(label != nullptr ? label : "");
@@ -642,7 +645,10 @@ void HomeActivity::render(RenderLock&&) {
     break;
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_SYNC_ALL), tr(STR_SELECT), tr(STR_DIR_PREV), tr(STR_DIR_NEXT));
+  // Right1 is always Settings now (see loop()'s own comment); Right2 is Sync
+  // All only while the header is focused, Select otherwise.
+  const auto labels = mappedInput.mapLabels(tr(STR_SETTINGS_TITLE), headerFocused ? tr(STR_SYNC_ALL) : tr(STR_SELECT),
+                                            tr(STR_DIR_PREV), tr(STR_DIR_NEXT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

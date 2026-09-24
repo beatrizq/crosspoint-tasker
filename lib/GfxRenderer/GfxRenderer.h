@@ -278,6 +278,19 @@ class GfxRenderer {
   // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  // Alternative to drawTextRotated90CW for narrow side-button labels: draws
+  // `text` as a vertical stack of upright glyphs, one codepoint per line
+  // (never a split multi-byte character), centered horizontally around
+  // centerX and vertically around centerY -- reads top-to-bottom without
+  // rotating the glyphs themselves. `lineAdvance` is the pixel distance from
+  // one letter to the next; 0 (the default) uses the font's own line height,
+  // and a smaller value packs the letters closer together.
+  void drawTextStacked(int fontId, int centerX, int centerY, const char* text, int lineAdvance = 0, bool black = true,
+                       EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  // Total height drawTextStacked() would occupy for `text` (codepoint count *
+  // lineAdvance, with the same 0 = font line height default) -- lets a caller
+  // size a surrounding box to fit the stack.
+  int getTextStackedHeight(int fontId, const char* text, int lineAdvance = 0) const;
   int getTextHeight(int fontId) const;
 
   // Grayscale functions

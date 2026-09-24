@@ -23,10 +23,6 @@ class CompanionTracker {
   CompanionTracker(const CompanionTracker&) = delete;
   CompanionTracker& operator=(const CompanionTracker&) = delete;
 
-  // True when the user has switched the companion on. Every hook is a no-op
-  // otherwise, so the stock organizer paths are untouched when disabled.
-  static bool isEnabled();
-
   // Active character, clamped so a settings value from a newer firmware (or a
   // hand-edited settings.json) cannot index past the sprite table.
   static companion::CompanionId activeId();
@@ -64,9 +60,8 @@ class CompanionTracker {
   bool hasValidClock() const { return clockValid; }
 
   // Resolves "today" as a local day number straight from the RTC, independent
-  // of whether the companion is enabled or any cached state. Used to stamp
-  // CompanionState::activatedDay and to show how long the companion has been
-  // active even while it is currently disabled. Returns false (outDay
+  // of any cached state. Used to stamp CompanionState::activatedDay and to
+  // show how long the companion has been active. Returns false (outDay
   // untouched) when the clock has no usable reading yet.
   static bool resolveLocalDay(int32_t& outDay);
 

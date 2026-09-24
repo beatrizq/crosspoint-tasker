@@ -79,6 +79,7 @@ void FileBrowserActivity::onEnter() {
   }
 
   selectorIndex = 0;
+  headerFocused = false;
 
   // If Confirm was held while this activity opened (typical when launched from a menu), ignore
   // its release — otherwise we'd immediately auto-open whatever is at index 0.
@@ -299,6 +300,13 @@ void FileBrowserActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right2)) {
+    if (mode == Mode::Books && headerFocused) {
+      // Captured by value: this screen is destroyed the instant
+      // goToSyncAll()'s own replaceActivity() call runs.
+      activityManager.goToSyncAll(
+          [path = basepath, backToRead = returnToReadMenu] { activityManager.goToFileBrowser(path, backToRead); });
+      return;
+    }
     activateSelected();
     return;
   }
@@ -335,32 +343,53 @@ void FileBrowserActivity::loop() {
   int listSize = static_cast<int>(files.size());
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
+    // A swipe is a page-jump, not a single step, so it always leaves the
+    // header stop (if it was focused) -- same reasoning as
+    // OrganizerScreenActivity's own swipe handling.
+    headerFocused = false;
     selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
     return;
   }
   if (swipe == MappedInputManager::SwipeDir::Down) {
+    headerFocused = false;
     selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
     return;
   }
 
   buttonNavigator.onNextRelease([this, listSize] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
+    if (headerFocused) {
+      headerFocused = false;
+      selectorIndex = 0;
+    } else if (mode == Mode::Books && static_cast<int>(selectorIndex) == listSize - 1) {
+      headerFocused = true;
+    } else {
+      selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
+    }
     requestUpdate();
   });
 
   buttonNavigator.onPreviousRelease([this, listSize] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
+    if (headerFocused) {
+      headerFocused = false;
+      selectorIndex = listSize > 0 ? static_cast<size_t>(listSize - 1) : 0;
+    } else if (mode == Mode::Books && selectorIndex == 0) {
+      headerFocused = true;
+    } else {
+      selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
+    }
     requestUpdate();
   });
 
   buttonNavigator.onNextContinuous([this, listSize, pageItems] {
+    headerFocused = false;
     selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
 
   buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
+    headerFocused = false;
     selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
@@ -397,7 +426,14 @@ void FileBrowserActivity::render(RenderLock&&) {
                            : (mode == Mode::PickImage)  ? std::string(tr(STR_SELECT_IMAGE_FILE))
                                                         : ((basepath == "/") ? std::string(tr(STR_SD_CARD))
                                                                              : basepath.substr(basepath.rfind('/') + 1));
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
+  const Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  GUI.drawHeader(renderer, headerRect, folderName.c_str());
+  // Hovering the header (see headerFocused's own comment): a true pixel
+  // invert, the same technique QuickPickActivity's own header focus uses.
+  if (mode == Mode::Books && headerFocused) {
+    renderer.invertRect(headerRect.x, headerRect.y, headerRect.width,
+                        std::min(HEADER_FOCUS_HIGHLIGHT_HEIGHT, headerRect.height));
+  }
 
   const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   const int pathReserved = pathLineHeight + metrics.verticalSpacing;
@@ -409,9 +445,9 @@ void FileBrowserActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
   } else {
     GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); },
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(),
+        headerFocused ? -1 : static_cast<int>(selectorIndex), [this](int index) { return getFileName(files[index]); },
+        nullptr, [this](int index) { return UITheme::getFileIcon(files[index]); },
         [this](int index) { return getFileExtension(files[index]); }, false);
   }
 
@@ -450,7 +486,9 @@ void FileBrowserActivity::render(RenderLock&&) {
   // "open"); show STR_SELECT instead. Directories in the same picker still descend, so keep
   // STR_OPEN there.
   const bool selectingReturnableFile = cancelsToCallerAtRoot && !files.empty() && files[selectorIndex].back() != '/';
-  const char* confirmLabel = files.empty() ? "" : (selectingReturnableFile ? tr(STR_SELECT) : tr(STR_OPEN));
+  const char* confirmLabel = (mode == Mode::Books && headerFocused)
+                                 ? tr(STR_SYNC_ALL)
+                                 : (files.empty() ? "" : (selectingReturnableFile ? tr(STR_SELECT) : tr(STR_OPEN)));
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
                                             files.empty() ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

@@ -87,7 +87,7 @@ void drawPose(const GfxRenderer& renderer, const CompanionId id, const Mood mood
 }
 
 void drawSpeechBubble(const GfxRenderer& renderer, const int x, const int y, const int w, const int h,
-                      const int tailLength, const TailSide side, const int lineWidth) {
+                      const int tailLength, const TailSide side, const int lineWidth, const bool filled) {
   if (w <= 4 || h <= 4) return;
 
   const int radius = std::min({10, w / 3, h / 3});
@@ -101,8 +101,9 @@ void drawSpeechBubble(const GfxRenderer& renderer, const int x, const int y, con
   const int right = x + w - 1;
   const int bottom = y + h - 1;
 
-  // Clear to paper first, following the rounded edge, so the text that follows
-  // is never sitting on top of whatever was behind the bubble.
+  // Clear to paper (or fill black, when `filled`) first, following the
+  // rounded edge, so the text that follows is never sitting on top of
+  // whatever was behind the bubble.
   for (int row = 0; row < h; row++) {
     int inset = 0;
     if (row < radius) {
@@ -112,7 +113,7 @@ void drawSpeechBubble(const GfxRenderer& renderer, const int x, const int y, con
       const int dy = row - (h - 1 - radius);
       inset = radius - isqrt(radius * radius - dy * dy);
     }
-    renderer.fillRect(left + inset, top + row, w - 2 * inset, 1, false);
+    renderer.fillRect(left + inset, top + row, w - 2 * inset, 1, filled);
   }
 
   // Straight runs between the corner arcs, `stroke` pixels thick -- same
@@ -130,9 +131,10 @@ void drawSpeechBubble(const GfxRenderer& renderer, const int x, const int y, con
 
   // Tail angled towards whoever is talking, the way a comic bubble points. The
   // base is kept near the tail's own length: a base much wider than the reach
-  // reads as a shallow flap rather than a pointer. Paper fill goes down first,
-  // which also erases the body edge between the base points, so the tail opens
-  // into the bubble instead of being a stuck-on shape.
+  // reads as a shallow flap rather than a pointer. Paper (or black, when
+  // `filled`) fill goes down first, which also erases the body edge between
+  // the base points, so the tail opens into the bubble instead of being a
+  // stuck-on shape.
   if (side == TailSide::Bottom) {
     const int baseHalf = std::max(3, std::min(tailLength / 2, w / 8));
     const int midX = left + (2 * w) / 3;  // off-centre, towards the character's head
@@ -140,7 +142,7 @@ void drawSpeechBubble(const GfxRenderer& renderer, const int x, const int y, con
     const int baseRightX = midX + baseHalf;
     const int tipY = bottom + tailLength;
     const int tipX = baseLeftX - tailLength / 3;
-    fillTriangle(renderer, baseLeftX, bottom, baseRightX, bottom, tipX, tipY, false);
+    fillTriangle(renderer, baseLeftX, bottom, baseRightX, bottom, tipX, tipY, filled);
     renderer.drawLine(baseLeftX, bottom, tipX, tipY, stroke, true);
     renderer.drawLine(tipX, tipY, baseRightX, bottom, stroke, true);
     return;
@@ -152,7 +154,7 @@ void drawSpeechBubble(const GfxRenderer& renderer, const int x, const int y, con
   const int baseBottomY = midY + baseHalf;
   const int tipX = left - tailLength;
   const int tipY = baseBottomY + tailLength / 3;
-  fillTriangle(renderer, left, baseTopY, left, baseBottomY, tipX, tipY, false);
+  fillTriangle(renderer, left, baseTopY, left, baseBottomY, tipX, tipY, filled);
   renderer.drawLine(left, baseTopY, tipX, tipY, stroke, true);
   renderer.drawLine(tipX, tipY, left, baseBottomY, stroke, true);
 }
@@ -176,22 +178,85 @@ BubbleFit fitBubbleText(const GfxRenderer& renderer, const int fontId, const std
   return fit;
 }
 
-const char* moodLabel(const Mood mood) {
+const char* idleBubbleText(const Mood mood, const uint8_t variant) {
+  const uint8_t v = variant % IDLE_BUBBLE_VARIANT_COUNT;
   switch (mood) {
+    case Mood::Break:  // Nothing left to do reads like a good day -- same lines as Happy.
     case Mood::Happy:
-      return tr(STR_COMPANION_MOOD_HAPPY);
+      switch (v) {
+        case 0:
+          return tr(STR_COMPANION_IDLE_HAPPY_1);
+        case 1:
+          return tr(STR_COMPANION_IDLE_HAPPY_2);
+        case 2:
+          return tr(STR_COMPANION_IDLE_HAPPY_3);
+        case 3:
+          return tr(STR_COMPANION_IDLE_HAPPY_4);
+        default:
+          return tr(STR_COMPANION_IDLE_HAPPY_5);
+      }
     case Mood::Satisfied:
-      return tr(STR_COMPANION_MOOD_SATISFIED);
+      switch (v) {
+        case 0:
+          return tr(STR_COMPANION_IDLE_SATISFIED_1);
+        case 1:
+          return tr(STR_COMPANION_IDLE_SATISFIED_2);
+        case 2:
+          return tr(STR_COMPANION_IDLE_SATISFIED_3);
+        case 3:
+          return tr(STR_COMPANION_IDLE_SATISFIED_4);
+        default:
+          return tr(STR_COMPANION_IDLE_SATISFIED_5);
+      }
     case Mood::Cranky:
-      return tr(STR_COMPANION_MOOD_CRANKY);
+      switch (v) {
+        case 0:
+          return tr(STR_COMPANION_IDLE_CRANKY_1);
+        case 1:
+          return tr(STR_COMPANION_IDLE_CRANKY_2);
+        case 2:
+          return tr(STR_COMPANION_IDLE_CRANKY_3);
+        case 3:
+          return tr(STR_COMPANION_IDLE_CRANKY_4);
+        default:
+          return tr(STR_COMPANION_IDLE_CRANKY_5);
+      }
     case Mood::Neglected:
-      return tr(STR_COMPANION_MOOD_NEGLECTED);
+      switch (v) {
+        case 0:
+          return tr(STR_COMPANION_IDLE_NEGLECTED_1);
+        case 1:
+          return tr(STR_COMPANION_IDLE_NEGLECTED_2);
+        case 2:
+          return tr(STR_COMPANION_IDLE_NEGLECTED_3);
+        case 3:
+          return tr(STR_COMPANION_IDLE_NEGLECTED_4);
+        default:
+          return tr(STR_COMPANION_IDLE_NEGLECTED_5);
+      }
     case Mood::Milestone:
-      return tr(STR_COMPANION_MOOD_MILESTONE);
+      switch (v) {
+        case 0:
+          return tr(STR_COMPANION_IDLE_MILESTONE_1);
+        case 1:
+          return tr(STR_COMPANION_IDLE_MILESTONE_2);
+        case 2:
+          return tr(STR_COMPANION_IDLE_MILESTONE_3);
+        case 3:
+          return tr(STR_COMPANION_IDLE_MILESTONE_4);
+        default:
+          return tr(STR_COMPANION_IDLE_MILESTONE_5);
+      }
     case Mood::Sleeping:
-      return tr(STR_COMPANION_MOOD_SLEEPING);
+      return tr(STR_COMPANION_IDLE_SATISFIED_1);
+    case Mood::Focus:
+      // Unreached in practice: Focus is only ever shown by the focus-session
+      // screens, which draw their own bubble text directly rather than going
+      // through this function. Same placeholder Sleeping uses rather than
+      // leaving it to the fallback below.
+      return tr(STR_COMPANION_IDLE_SATISFIED_1);
   }
-  return tr(STR_COMPANION_MOOD_SATISFIED);
+  return tr(STR_COMPANION_IDLE_SATISFIED_1);
 }
 
 }  // namespace companion

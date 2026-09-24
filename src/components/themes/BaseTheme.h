@@ -23,6 +23,16 @@ struct TabInfo {
   bool selected;
 };
 
+// Height a "focused header" invert-highlight uses, on every screen that has
+// one -- deliberately independent of that screen's own (taller)
+// metrics.headerHeight, which is sized for a full title+subtitle band.
+// Inverting the whole band reads as a big, blocky fill; this hugs just the
+// title row instead, the same thinness QuickPickActivity's own header focus
+// originated with (its HEADER_HIGHLIGHT_HEIGHT), so every screen's header
+// highlight reads as the same weight regardless of how tall its own header
+// actually is.
+constexpr int HEADER_FOCUS_HIGHLIGHT_HEIGHT = 30;
+
 struct ThemeMetrics {
   int batteryWidth;
   int batteryHeight;
@@ -222,7 +232,11 @@ class BaseTheme {
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
-  virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
+  // topSelected/bottomSelected draw that label inverted (white letters on a
+  // black fill) -- how a caller marks which of the two is the current
+  // selection.
+  virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn,
+                                   bool topSelected = false, bool bottomSelected = false) const;
   virtual int getListRowStep(bool hasSubtitle) const;
   virtual int getListPageItems(int contentHeight, bool hasSubtitle) const;
   virtual void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
@@ -235,8 +249,14 @@ class BaseTheme {
   // theme (Lyra) that draws one at all -- false for QuickPickActivity, whose
   // own companion-focus box highlight sits right where that rule would,
   // making the two look like a redundant double line.
+  // includeStatusRow: whether to draw the clock/date/battery row a theme
+  // otherwise always paints into a header rect -- false for a *second*,
+  // embedded title drawn mid-screen (QuickPickActivity's own scaled-down
+  // Tasks section below the companion figure), so that row isn't duplicated;
+  // true (the default) preserves every call site that only ever draws one
+  // header, at the top of the screen.
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr,
-                          bool showRule = true) const;
+                          bool showRule = true, bool includeStatusRow = true) const;
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                              const char* rightLabel = nullptr) const;
   virtual void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,

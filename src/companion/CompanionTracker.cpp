@@ -39,8 +39,6 @@ companion::MoodThresholds thresholdsFromSettings() {
 }
 }  // namespace
 
-bool CompanionTracker::isEnabled() { return SETTINGS.companionEnabled != 0; }
-
 companion::CompanionId CompanionTracker::activeId() {
   const uint8_t id = SETTINGS.companionId;
   if (id >= companion::COMPANION_COUNT) return static_cast<companion::CompanionId>(0);
@@ -97,10 +95,7 @@ void CompanionTracker::refreshDay() {
   localMinuteOfDay = minuteOfDay;
 }
 
-void CompanionTracker::refreshForDisplay() {
-  if (!isEnabled()) return;
-  refreshDay();
-}
+void CompanionTracker::refreshForDisplay() { refreshDay(); }
 
 uint16_t CompanionTracker::liveHabitsCompletedToday() {
   const auto& habits = HABITIFY_HABITS.getHabits();
@@ -109,7 +104,6 @@ uint16_t CompanionTracker::liveHabitsCompletedToday() {
 }
 
 void CompanionTracker::recordActivity() {
-  if (!isEnabled()) return;
   // The day can have rolled over since this screen was entered (reading past
   // midnight is a reader concern, but a completion right after waking the
   // device is not), so re-resolve it before crediting.
@@ -145,6 +139,15 @@ companion::Mood CompanionTracker::currentMood() const {
   // nothing is lost, only deferred until the companion is awake again with
   // that same local day still current.
   if (isWithinSleepWindow()) return companion::Mood::Sleeping;
+
+  // Nothing left to do: a task list that has been synced and is now empty
+  // means everything the user's filter matched has been done, so the
+  // companion takes a break. Requires a sync to have happened -- an empty
+  // cache on a device that never synced is "no data yet", not "all done".
+  // Checked ahead of Milestone on purpose: while the list stays empty this
+  // is the mood, even on a record-beating day; the Milestone flag itself
+  // (milestoneDay) is untouched and applies again once a task reappears.
+  if (TODOIST_TASKS.hasSynced() && TODOIST_TASKS.getTasks().empty()) return companion::Mood::Break;
 
   const auto thresholds = thresholdsFromSettings();
   const auto in = buildMoodInput(thresholds);

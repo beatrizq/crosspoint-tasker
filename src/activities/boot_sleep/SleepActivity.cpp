@@ -38,6 +38,16 @@ void SleepActivity::onEnter() {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
   }
 
+  // "Invert sleep screen": every screen drawn below -- the custom/cover
+  // bitmaps, the default logo -- comes out rotated 180 degrees, because
+  // drawBitmap() and the other drawing calls all go through drawPixel(),
+  // which applies the renderer's orientation transform. Quick Resume returned
+  // above without drawing anything of its own: it just leaves the last page
+  // already on the panel, so there is nothing to rotate there.
+  if (SETTINGS.sleepScreenInvert) {
+    renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+  }
+
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
       return renderBlankSleepScreen();

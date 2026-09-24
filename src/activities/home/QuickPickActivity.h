@@ -8,21 +8,33 @@
 #include <vector>
 
 #include "activities/Activity.h"
+#include "activities/organizer/HabitTabModel.h"
+#include "activities/organizer/TaskTabModel.h"
 
 /**
- * The companion's own screen: a big pose of its figure, mood and speech
- * bubble (a task/habit suggestion, or the sleeping/empty text -- the bubble
- * itself never shows a BLE notification; those stay on the dedicated Alerts
- * screen). A glance strip sits right under the header -- today's own Google
- * Calendar events, bulleted (see todaysEvents()'s own comment; there can be
- * more than one, so this is a plain bullet, not that one app's own icon) --
- * purely informational: it neither joins the Left1/Left2 loop below nor sits
- * inside either focus highlight described there. The YNAB "Wants" balance
- * and the newest BLE alert are temporarily out of this strip (see render()'s
- * own comment; glanceBudgetWants()/glanceNewestAlert() are still here for
- * when they come back). The header itself carries no title or subtitle
- * of this screen's own (drawHeader() is called with both nullptr; see
- * render()'s own comment for why) -- the companion's name and its
+ * The companion's own screen -- and, since ActivityManager::goHome() now
+ * constructs this instead of HomeActivity, the app's actual Home. Every
+ * "Home"/"Apps" button anywhere in the app lands here; the old app-tile grid
+ * (HomeActivity) is left fully intact but unreachable. A big pose of the
+ * companion's figure, its mood, and a speech bubble -- the newest BLE alert
+ * not yet dismissed from here (see CompanionAlertBubble), or a plain
+ * mood-flavored idle line once there's none left. Never a task/habit
+ * suggestion (that's what the embedded Tasks section below is for), and the
+ * companion no longer reacts to anything else (a completion, an event, a
+ * budget change, ...) -- alerts and idle are the only two things the bubble
+ * ever shows. A glance strip sits right under the header -- today's own
+ * Google Calendar events, bulleted (see todaysEvents()'s own comment; there
+ * can be more than one, so this is a plain bullet, not that one app's own
+ * icon), collapsing to nothing when there is genuinely nothing today rather
+ * than spending space on a "nothing today" line. The YNAB "Wants" balance is
+ * temporarily out of this strip (see render()'s own comment;
+ * glanceBudgetWants() is still here for when it comes back) -- the newest BLE
+ * alert now belongs to the bubble instead of this strip permanently (see the
+ * speech bubble description above); glanceNewestAlert() is unused for that
+ * reason, not temporarily, but is left alongside glanceBudgetWants() for the
+ * same "kept, not deleted" reasoning. The header itself carries no title or
+ * subtitle of this screen's own (drawHeader() is called with both nullptr;
+ * see render()'s own comment for why) -- the companion's name and its
  * Age/Highscore, shown here on earlier iterations of this screen, are gone.
  * On Lyra/Lyra 3 Covers the header is where that theme's own
  * clock+date+battery combo lives (LyraTheme::drawHeader draws it
@@ -31,88 +43,98 @@
  * hovering the header (see the Focus enum) inverts whatever the theme drew
  * there, clock/date/battery included.
  *
- * Below the companion figure sits a tab bar (see the Tab enum) -- Tasks,
- * Habits, Logs -- so acting on a Tasks/Habits row updates the mood right
- * where it's shown, without leaving to the real Tasks/Habits screens. Tasks
- * and Habits show the same items that count toward the mood (see
- * relevantTaskIndices()/relevantHabitIndices()'s own comment: due-today-or-
- * overdue tasks, not-yet-done habits) -- exactly what a Random reroll could
- * land on. Logs is today's completed tasks/habits, unchanged from this
- * screen's own original single-list design.
+ * Straight below the companion figure -- no mood label any more (removed
+ * entirely, freeing that space for the section below to sit higher) -- is a
+ * scaled-down rendering of the *real* Tasks screen itself: a single thin
+ * rule marking where it starts (no title of its own, and no Highscore any
+ * more -- the companion's best-ever single-day total is only used for the
+ * Milestone mood now, see DayLedger::bestDayPoints), and its own tab bar
+ * (Overdue/Today/Upcoming/No date/Logs, whichever have rows
+ * -- there is no "All" tab; the first visible one is the default -- see
+ * activities/organizer/TaskTabModel.h, shared with the real TasksActivity
+ * screen so the two never disagree about which task is in which tab),
+ * confined to the space budget below the companion figure
+ * (COMPANION_BUDGET_PERCENT). Acting on a row here updates the mood right
+ * where it's shown, without leaving to the real screen. The side Up/Down
+ * buttons (labelled Tasks/Habits, see below) swap that whole section for a
+ * scaled-down rendering of the real *Habits* screen -- under the same rule,
+ * its area tab bar (All / one per Habitify area / Logs, see
+ * activities/organizer/HabitTabModel.h, shared with HabitsActivity the same
+ * way TaskTabModel is with TasksActivity) and habit rows -- in the same
+ * space. Tasks is the default on every entry. Note that this screen has no
+ * button that opens the real Tasks/Habits/Budget screens: the side buttons
+ * that used to cycle apps now switch sections, and Right1 on the tab bar is
+ * Random.
  *
- * Reached from Home (the companion's own grid tile) or reconstructed on boot
- * from CrossPointState when the device was showing this screen at the moment
- * it went to sleep -- either way, everything this screen needs comes through
- * the constructor, since it also mirrors its own content into CrossPointState
- * on entry and on every reroll (see onEnter()/reroll()) rather than main.cpp
- * fishing it out reactively.
+ * Reconstructed on boot from CrossPointState when the device was showing
+ * this screen at the moment it went to sleep (see
+ * CrossPointState::lastSleepFromQuickPick), same as every other cold-boot
+ * path that lands here via goHome() -- this screen carries no per-instance
+ * content of its own, so there is never a payload to reconstruct, only "open
+ * the screen".
  *
  * Button IDs used here: Left1/Left2 are the pair that moves focus; Right1/
- * Right2 are the pair printed "Apps"/"Select" on the case (Right1 = the
- * button that otherwise always leaves, Right2 = the button that otherwise
- * always opens options). Focus (see the Focus enum) cycles through three
- * stops in one continuous circular loop -- the Logs section, the companion
- * figure, then the header -- in that order (Left2 = forward: last Logs-
- * section row -> header -> companion -> wraps to the Logs section's own tab
- * bar; Left1 = the exact reverse):
- *   - Logs section: the tab bar itself (see tabBarFocused's own comment) is
- *     always the first stop -- "the start of the Logs section" -- reachable
- *     regardless of whether the active tab has any rows; Right2 there cycles
- *     to the next tab (same convention every other tabbed screen in this app
- *     uses: OrganizerScreenActivity's own "index 0 is the tab bar"). Past the
- *     tab bar, each tab's own rows: Logs' own row is Select-less -- Right2 on
- *     a row is Clear instead, and only when that row is Cached (see
- *     LogEntry::cached and clearLogRow()'s own comment): a completion still
- *     local/unpushed, actually reversible, as opposed to Synced (a sync
- *     already confirmed it, nothing local left to undo, Right2 does nothing
- *     there). Tasks/Habits rows are actionable -- Right2 opens the same
- *     options popup (Complete/Focus session/Reschedule for a task; Log/
- *     Complete/Focus session for a habit) a real row's own action does (see
- *     showTaskRowOptions()/showHabitRowOptions()), resolved against a cache
- *     index straight from relevantTaskIndices()/relevantHabitIndices()
- *     rather than a row list this screen owns a copy of. Right1 leaves in
- *     every state here (tab bar or row), same as every state except the
- *     companion figure.
- *   - Companion figure: a rounded selection-box outline spanning (almost)
- *     the full content width, bounding the companion section alone -- bubble
- *     and sprite only, never the tab bar/rows below it (this screen reads as
- *     three sections, and the highlight only ever claims the one that's
- *     focused). Same rounded "outline, not fill" style the pre-grid-tile
- *     Home screen once drew around its own companion column. Right2 stays
- *     Select (acts on the suggestion) and Right1 -- which otherwise always
- *     leaves -- becomes Random instead.
+ * Right2 are the pair printed "Apps"/"Select" on the case. Focus (see the
+ * Focus enum) cycles through four stops in one continuous circular loop, in
+ * visual top-to-bottom order -- the header, the glance strip, the companion
+ * figure, then the embedded Tasks section -- wrapping back to the header
+ * (Left2 = forward, Left1 = the exact reverse). Right2 acts on whatever is
+ * focused, same as always; Right1 no longer means "leave" anywhere on this
+ * screen -- there is nowhere left to leave *to*, this screen already is Home
+ * -- so it is a per-stop shortcut instead:
  *   - Header (no title/subtitle of this screen's own, just whatever
  *     clock/date/battery the active theme draws into it): shown inverted
  *     (a plain black fill, nothing this screen draws back on top of it)
  *     rather than the companion's outline style when focused -- drawn as an
  *     overlay on top of the theme's own GUI.drawHeader() output (see
  *     render()'s own comment) rather than asking the theme for an inverted
- *     variant, since drawHeader() has no such parameter. Right1 leaves, same
- *     as the Logs section; Right2 is Sync All (activityManager.
- *     goToSyncAll()) instead of Clear/Select, since there's no per-row or
- *     per-suggestion action to offer here.
- * Right1 leaving always reports the current suggestion as a QuickPickResult
- * so Home's own companion tile stays in sync -- setResult() has to be called
- * before finish(), not in onExit() -- ActivityManager::popActivity() reads
- * the result before it runs the outgoing activity's onExit().
+ *     variant, since drawHeader() has no such parameter. Right1 opens
+ *     Settings; Right2 is Sync All (activityManager.goToSyncAll()) instead
+ *     of Clear/Select, since there's no per-row action to offer here.
+ *   - Glance strip: the whole strip is one stop, not one per event -- there
+ *     can be several bulleted events, but Right1's own action (open
+ *     Calendar) is the same regardless of which one is showing. Inverted the
+ *     same way the header is when focused. Skipped by Left1/Left2 entirely
+ *     when there is genuinely nothing today (see todaysEvents()'s own
+ *     comment) -- an empty strip has nothing to land on, same reasoning the
+ *     old mood-label stop used to skip itself when hidden.
+ *   - Companion figure: the bubble itself inverts (black background, white
+ *     text) rather than a selection-box outline around the figure -- the
+ *     bubble is the thing being acted on here, so the highlight belongs on
+ *     it directly. Right2 is Dismiss when an alert is currently showing
+ *     (steps to the next-newest one not yet dismissed, see
+ *     CompanionAlertBubble), and does nothing when the bubble is showing its
+ *     idle line instead -- there's nothing to dismiss then. Right1 opens the
+ *     Alerts screen (only a real destination in builds with
+ *     ENABLE_BLE_NOTIFY_SPIKE defined; a no-op otherwise).
+ *   - Embedded section (Tasks or Habits, whichever is showing): the tab bar
+ *     itself (see tabBarFocused's own comment) is always the first stop --
+ *     "the start of the section" -- reachable regardless of whether the
+ *     active tab has any rows; Right2 there cycles to the next of the
+ *     currently-visible tabs (same convention every other tabbed screen in
+ *     this app uses: OrganizerScreenActivity's own "index 0 is the tab
+ *     bar"), and Right1 is Random: it drops onto a random row of the active
+ *     tab (nothing to randomize on a Logs tab, so it is blank there). From a
+ *     row, Right1 is Back instead: it returns the cursor to that tab bar --
+ *     the same two-level Back the real Tasks/Habits/Calendar/Budget/Settings
+ *     screens now have. Past the tab bar, each tab's own rows are actionable
+ *     -- Right2 opens the same Options popup a real row's own action does
+ *     (see showTaskRowOptions()/showHabitRowOptions()). On a Logs tab, Right2
+ *     is Clear on a Cached row (undoes the local completion, same as the old
+ *     standalone Logs screen).
  *
- * Side Up/Down jump to the previous/next app in the home grid's own order --
- * the same shortcut every app screen has (see
- * OrganizerScreenActivity/SettingsActivity's own identical block),
- * independent of Left1/Left2/Right1/Right2 above.
+ * Side Up/Down are overridden on this screen only: everywhere else in the
+ * app they jump to the previous/next app in the home grid's own order (see
+ * OrganizerScreenActivity/SettingsActivity's own identical block), but here
+ * they are labelled Tasks/Habits and choose which section shows below the
+ * companion (switchSection()), from whichever focus stop the cursor is on --
+ * independent of Left1/Left2/Right1/Right2 above. This is the one screen
+ * from which the app-jump shortcut is not reachable at all.
  */
 class QuickPickActivity final : public Activity {
  public:
-  // itemId is the Todoist task id / Habitify habit id behind pickedText, so
-  // Go can act on that exact item. Empty when poolEmpty is true (nothing was
-  // picked).
-  QuickPickActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string pickedText, std::string itemId,
-                    const bool isHabit, const bool poolEmpty)
-      : Activity("QuickPick", renderer, mappedInput),
-        pickedText(std::move(pickedText)),
-        itemId(std::move(itemId)),
-        isHabit(isHabit),
-        poolEmpty(poolEmpty) {}
+  QuickPickActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : Activity("QuickPick", renderer, mappedInput) {}
 
   void onEnter() override;
   void loop() override;
@@ -120,78 +142,14 @@ class QuickPickActivity final : public Activity {
   bool isQuickPickActivity() const override { return true; }
 
  private:
-  // Rerolls via quickpick::roll() -- the same pool/weights Home's own roll
-  // used -- and re-mirrors the result into CrossPointState.
-  void reroll();
-
-  // One row of the Logs row list -- see logEntries()'s own comment.
-  struct LogEntry {
-    std::string text;
-    bool isTask;  // true: taskEntryIndex is valid. false: habitId is valid.
-    // Whether Clear (Right2, see loop()'s own comment) is offered for this
-    // row: Cached (still local/unpushed -- safely, actually reversible) vs
-    // Synced (a sync already confirmed it -- nothing local left to undo).
-    bool cached;
-    size_t taskEntryIndex;  // Index into TODOIST_TASKS.getCompletedTodayEntries().
-    std::string habitId;    // HABITIFY_HABITS habit id.
-  };
-  // Today's completed tasks/habits, in completion order -- same source
-  // LogsActivity's own loadEntries() once read (TodoistTaskCache::
-  // getCompletedTodayEntries() plus completed habits). Rebuilt fresh every
-  // call rather than stored.
-  std::vector<LogEntry> logEntries() const;
-  // Right2 on a Cached row (see clearLogRow()'s own comment for what "Cached"
-  // means for a task vs. a habit): actually reverses the completion --
-  // TodoistTaskCache::cancelCompletedLogEntry() for a task,
-  // HabitifyHabitCache::undoLocalCompletion() for a habit. A Synced row (a
-  // sync already confirmed it) has nothing local left to undo, so Right2 is
-  // simply not offered there (see render()'s own confirmLabel logic) --
-  // clearLogRow() is never called for one.
-  void clearLogRow(const LogEntry& entry);
-
-  // Go opens this. Same [action, Focus session] choice Tasks/Habits show on
-  // a row, resolved against itemId rather than a selected row.
-  void showOptions();
-  void completeSuggestedTask();
-  void logSuggestedHabit();
-  // The Options menu's "Complete" entry for a habit suggestion opens this:
-  // marks it done directly, via organizerActions::completeHabit() - works
-  // even for a goal-less habit logSuggestedHabit()'s number entry cannot
-  // touch.
-  void completeSuggestedHabit();
-  // The Options menu's "Focus session" entry opens this: a duration picker,
-  // then organizerActions::beginFocusSession() for the suggested item.
-  void offerFocusSession();
-  // The Options menu's "Reschedule" entry opens this (task suggestions only -
-  // a habit has no due date): a sub-choice between picking a new date and
-  // clearing the due date entirely.
-  void offerReschedule();
-  // "Pick a date" from offerReschedule()'s sub-menu: the date picker itself.
-  void offerRescheduleDatePicker();
-  // "No date" from offerReschedule()'s sub-menu: clears the due date directly,
-  // no further confirmation - same immediacy as Complete.
-  void clearTaskDueDate();
-
-  // The cache indices that count toward the companion's mood right now --
-  // same criteria quickpick::roll() itself pools from (see its own comment,
-  // and currentPickStillEligible()'s identical task predicate): tasks
-  // overdue or due today, habits not yet complete. Rebuilt fresh every call
-  // rather than stored, the same way logEntries() already is.
-  std::vector<size_t> relevantTaskIndices() const;
-  std::vector<size_t> relevantHabitIndices() const;
-  // How many rows the active tab currently has -- logEntries().size() for
-  // Logs, relevantTaskIndices()/relevantHabitIndices().size() for the other
-  // two. Used by loop()'s own Left1/Left2 traversal so it does not need to
-  // know which list backs whichever tab is active.
-  size_t activeTabRowCount() const;
+  // Declared ahead of its first use in the method declarations below.
+  enum class Section { Tasks, Habits };
 
   // Tasks tab row action -- mirrors TasksActivity's own showRowOptions() and
   // the actions it leads to, resolved against a task id (re-resolved to a
-  // cache index at each step, the same "re-resolve after a popup closes"
-  // pattern completeSuggestedTask()/offerRescheduleDatePicker() above
-  // already use for itemId) rather than a row list this screen owns a copy
-  // of -- a cache index alone would go stale if the list changes while a
-  // popup from an earlier step is still open.
+  // cache index at each step -- a cache index alone would go stale if the
+  // list changes while a popup from an earlier step is still open) rather
+  // than a row list this screen owns a copy of.
   void showTaskRowOptions(size_t cacheIndex);
   void completeTaskRow(const std::string& taskId);
   void offerRescheduleRow(const std::string& taskId);
@@ -199,86 +157,122 @@ class QuickPickActivity final : public Activity {
   void clearTaskDueDateRow(const std::string& taskId);
   void offerFocusSessionForTask(const std::string& taskId);
 
-  // Habits tab row action -- mirrors HabitsActivity's own showRowOptions().
+  // Habits row action -- mirrors HabitsActivity's own showRowOptions() and the
+  // actions it leads to (Log a number, Complete, Focus session), resolved
+  // against a habit id for the same reason the task actions above are.
   void showHabitRowOptions(size_t cacheIndex);
   void logHabitRow(const std::string& habitId);
   void completeHabitRow(const std::string& habitId);
   void offerFocusSessionForHabit(const std::string& habitId);
+  // Right2 on a Cached Logs row of the Habits section: undoes today's local
+  // completion, the same action HabitsActivity's own Logs tab offers. No-op on
+  // a Synced row or when the active tab isn't Logs.
+  void clearSelectedHabitLogRow();
 
-  // Whether the current pick is still a valid quickpick candidate: present in
-  // its cache and, for a habit, still short of its target. Checked once an
-  // action has actually mutated the cache -- a completed task is gone from
-  // the cache outright, and a habit logged to its target drops out the same
-  // way roll()'s own pool would exclude it. Only then is a fresh suggestion
-  // rolled; Focus session, a cancelled popup, or a habit log that leaves it
-  // still short of target all leave the bubble showing exactly what it did
-  // before.
-  bool currentPickStillEligible() const;
+  // Which embedded section is showing and its row/tab facts, so the input and
+  // render code can treat Tasks and Habits alike wherever they behave alike.
+  // embeddedRow() is the active section's own row cursor.
+  int embeddedRowCount() const;
+  bool embeddedOnLogs() const;
+  int& embeddedRow() { return section == Section::Tasks ? taskSelectedRow : habitSelectedRow; }
+  int embeddedRow() const { return section == Section::Tasks ? taskSelectedRow : habitSelectedRow; }
 
-  // Common tail of every suggestion action above: rerolls the suggestion if
-  // what it was showing is no longer eligible, then repaints.
+  // Shows `next` in the embedded section (the side Up/Down buttons, labelled
+  // Tasks/Habits). Lands on that section's tab bar, whichever focus stop the
+  // cursor was on. No-op if it is already showing.
+  void switchSection(Section next);
+
+  // Moves the active section to the previous (delta -1) or next (delta +1)
+  // visible tab, wrapping at both ends. Right2 on the tab bar. No-op with
+  // fewer than two tabs.
+  void switchTab(int delta);
+
+  // Right2/Right1(Select) on a Cached Logs row: undoes today's local
+  // completion, the same action TasksActivity's own Logs tab offers. No-op
+  // on a Synced row or when the active kind isn't LOGS.
+  void clearSelectedLogTaskRow();
+
+  // Common tail of every tab-row action above: repaints once the popup chain
+  // it led to has closed. A completion/reschedule can change which tabs
+  // exist (same as the real screen), so this also rebuilds the tab set.
   void afterRowAction();
 
-  // render()'s own three tab bodies, sharing the rect below the tab bar.
-  void renderLogsTab(int top, int height) const;
+  // Recomputes both sections' tab sets (visibleTabs/activeKind, see
+  // TaskTabModel::rebuildVisibleTabs; visibleAreaIds/activeAreaId, see
+  // HabitTabModel::rebuildVisibleAreas) and clamps each row cursor into its
+  // rebuilt tab's row count. Called from onEnter() and afterRowAction().
+  void rebuildEmbeddedTabs();
+
+  // The embedded Tasks section's own row renderer, confined to the given
+  // (top, height) band below the companion figure -- same convention this
+  // screen's own tab bar/header already use for staying inside that budget.
   void renderTasksTab(int top, int height) const;
+  // Same, for the Habits section: a habit's name with its progress hard right
+  // (or the Cached/Synced two-line style on the Logs tab).
   void renderHabitsTab(int top, int height) const;
 
   // One line of the glance strip's own Calendar bullet list (see this
   // file's own header comment and todaysEvents()'s own comment). isFallback
-  // means title is the whole line (not synced yet / nothing today) -- no
-  // bullet, no time, drawn plain.
+  // means title is the whole line (not synced yet) -- no bullet, no time,
+  // drawn plain.
   struct GlanceEventRow {
     std::string title;
     std::string time;  // ", HH:MM" (pre-formatted, own leading separator), or empty.
     bool isFallback = false;
   };
   // Today's own Calendar events, one row per event, in GCAL_EVENTS' own
-  // chronological order -- always at least one row (a fallback row covers
-  // "not synced yet" and "nothing today" alike, so render() never needs to
-  // check hasSynced() itself).
+  // chronological order. Empty (not a fallback row) when synced and there is
+  // genuinely nothing today; a fallback row only ever covers "not synced
+  // yet" (see todaysEvents()'s own comment).
   std::vector<GlanceEventRow> todaysEvents() const;
-  // Temporarily unused (see render()'s own comment) -- kept, not deleted,
-  // since the glance strip is meant to grow back to include these.
+  // glanceBudgetWants() is temporarily unused (see render()'s own comment)
+  // -- kept, not deleted, since the glance strip is meant to grow back to
+  // include it. glanceNewestAlert() is unused for a different, permanent
+  // reason: the newest alert is the bubble's job now (see this file's own
+  // header comment) -- kept alongside its sibling rather than deleted for
+  // the same reason.
   std::string glanceBudgetWants() const;
   std::string glanceNewestAlert() const;
 
-  std::string pickedText;
-  std::string itemId;
-  bool isHabit;
-  bool poolEmpty;
-
-  // Row cursor into whichever list backs the active tab (logEntries(),
-  // relevantTaskIndices(), or relevantHabitIndices()) -- a row index into
-  // that list, not a cache index. Reset to 0 whenever the tab changes (see
-  // switchTab()'s own comment): the old cursor was into a different list.
-  int logSelectedRow = 0;
-  // Which of this screen's three sections has focus (see this file's own
-  // header comment for the full Logs/Companion/Header loop). Companion and
-  // Header are single stops with no cursor of their own -- only the Logs
-  // section needs logSelectedRow/tabBarFocused above/below.
-  enum class Focus { Logs, Companion, Header };
+  // Row cursor into the embedded Tasks section's active tab -- a row index
+  // into whichever list backs activeKind (the live task cache for the five
+  // real kinds, TODOIST_TASKS.getCompletedTodayEntries() for LOGS), not a
+  // cache index itself. Reset by rebuildEmbeddedTabs() whenever the tab set
+  // changes.
+  int taskSelectedRow = 0;
+  // Row cursor into the Habits section's active tab -- same idea as
+  // taskSelectedRow, for HabitTabModel's rows.
+  int habitSelectedRow = 0;
+  // Which of the two embedded sections below the companion is showing --
+  // always Tasks on entry; switched by the side Up/Down buttons.
+  Section section = Section::Tasks;
+  // Which of this screen's four stops has focus (see this file's own header
+  // comment for the full loop order). Header, Glance and Companion are
+  // single stops with no cursor of their own -- only the embedded section
+  // (whichever of Tasks/Habits is showing) needs its row cursor and
+  // tabBarFocused.
+  enum class Focus { Embedded, Header, Glance, Companion };
   Focus focus = Focus::Companion;
 
-  enum class Tab : uint8_t { Tasks = 0, Habits = 1, Logs = 2 };
-  static constexpr int TAB_COUNT = 3;
-  Tab nextTab() const { return static_cast<Tab>((static_cast<int>(activeTab) + 1) % TAB_COUNT); }
-  // The tab bar's own label for a given tab, translated.
-  static const char* tabLabel(Tab tab);
-  // Switches the active tab, resetting the row cursor -- the old cursor was
-  // into a different list, and rebuilding that list to check it is still in
-  // range is not worth it for what a fresh 0 already gives for free. Does
-  // not touch tabBarFocused: only ever called while the tab bar itself is
-  // focused (Right2 there cycles tabs without leaving the tab bar).
-  void switchTab(Tab next);
-
-  Tab activeTab = Tab::Logs;
-  // While focus == Logs: whether the tab bar itself, not a row, has the
-  // highlight -- "the start of the Logs section" (see this file's own
+  // Tabs currently visible in the embedded section, and which one is active
+  // -- same shape as TasksActivity's own visibleTabs/currentKind(), kept in
+  // sync with it via the shared TaskTabModel (see this file's own header
+  // comment).
+  std::vector<taskTabModel::TaskTabKind> visibleTabs{taskTabModel::TaskTabKind::OVERDUE};
+  taskTabModel::TaskTabKind activeKind = taskTabModel::TaskTabKind::OVERDUE;
+  // The Habits section's equivalents: the area ids of the tabs on screen (""
+  // is All, habitTabModel::LOGS_AREA_ID the trailing Logs tab) and which one
+  // is active. "" -- All -- is the default, the same first tab HabitsActivity
+  // opens on.
+  std::vector<std::string> visibleAreaIds{""};
+  std::string activeAreaId;
+  // While focus == Embedded: whether the tab bar itself, not a row, has the
+  // highlight -- "the start of the embedded section" (see this file's own
   // header comment), and always reachable there regardless of whether the
   // active tab has any rows (mirrors OrganizerScreenActivity's own "index 0
   // is the tab bar" convention, just as a separate bool instead of folding
-  // it into logSelectedRow's own index space).
+  // it into the row cursor's own index space). Shared by both sections: only
+  // one is ever showing.
   bool tabBarFocused = false;
 
   // Mirrors HomeActivity's own lastCompanionRefreshMs/lastCompanionMood --
@@ -291,6 +285,13 @@ class QuickPickActivity final : public Activity {
   // other place that calls CompanionTracker::refreshForDisplay().
   unsigned long lastCompanionRefreshMs = 0;
   companion::Mood lastCompanionMood = companion::Mood::Happy;
+  // Which of companion::idleBubbleText()'s IDLE_BUBBLE_VARIANT_COUNT lines
+  // the bubble shows for the current mood, when it's showing an idle line at
+  // all (see render()'s own comment) -- rolled fresh in onEnter() and again
+  // whenever the mood changes (loop()'s own periodic re-check), so the same
+  // remark doesn't repeat on every visit or every mood shift, but also
+  // doesn't change mid-visit just from moving focus around the screen.
+  uint8_t idleVariant = 0;
 
   // See OrganizerScreenActivity's own swallow flags for why these exist: the
   // Options popup (and the confirmation or number entry it can lead to)
@@ -298,11 +299,15 @@ class QuickPickActivity final : public Activity {
   // owed to this screen once the sub-activity it was pushed from closes.
   bool swallowConfirmRelease = false;
   bool swallowBackRelease = false;
-  // Side Up/Down jump to the previous/next app in the home grid's own order
-  // -- the same shortcut every other app screen has (see
-  // OrganizerScreenActivity/SettingsActivity's own identical block). Guarded
-  // by a fresh-press check the same way Right1/Right2 are above, in case one
-  // was already held down when some other gesture left this screen.
+  // Side Up/Down switch the embedded section to Tasks/Habits on this screen
+  // (see switchSection() and this file's own header comment) rather than the
+  // app-jump shortcut every other screen's side buttons have. Guarded by a
+  // fresh-press check the same way Right1/Right2 are above, in case one was
+  // already held down when some other gesture left this screen.
   bool upPressSeen = false;
   bool downPressSeen = false;
+
+  // millis() at onEnter(), so loop() can briefly ignore a Right1 release
+  // right after landing here -- see RIGHT1_ENTRY_GRACE_MS's own comment.
+  unsigned long enteredAtMs = 0;
 };

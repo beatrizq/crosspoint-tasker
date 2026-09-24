@@ -48,7 +48,7 @@ void drawScrollBar(const GfxRenderer& renderer, Rect rect, int itemCount, int pa
 int coverWidth = 0;
 
 void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
-                                  const bool showRule) const {
+                                  const bool showRule, const bool includeStatusRow) const {
   (void)subtitle;
   (void)showRule;  // This theme never draws a header rule to begin with.
   // Home screen header is custom-rendered in drawRecentBookCover.
@@ -59,29 +59,38 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
   const int titleX = rect.x + sidePadding;
   const int titleY = rect.y + 14;
 
-  const bool showBatteryPercentage =
-      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  const int batteryIconX = rect.x + rect.width - sidePadding - RoundedRaffMetrics::values.batteryWidth;
+  // A second, embedded header drawn mid-screen (QuickPickActivity's own
+  // scaled-down Tasks section below the companion figure) skips the battery
+  // group entirely -- it already has one at the top of the screen, and the
+  // title gets the full width instead.
+  int maxTitleWidth = rect.width - sidePadding * 2;
+  if (includeStatusRow) {
+    const bool showBatteryPercentage =
+        SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
+    const int batteryIconX = rect.x + rect.width - sidePadding - RoundedRaffMetrics::values.batteryWidth;
 
-  // Reserve space for the widest possible percentage text to avoid title/battery overlap
-  int batteryGroupLeftX = batteryIconX;
-  if (showBatteryPercentage) {
-    // Clear a fixed-width area for the battery percentage to avoid ghosting when digit count changes (e.g. 100% -> 99%)
-    const int maxTextWidth = renderer.getTextWidth(SMALL_FONT_ID, "100%");
-    batteryGroupLeftX -= maxTextWidth + batteryPercentSpacing;
+    // Reserve space for the widest possible percentage text to avoid title/battery overlap
+    int batteryGroupLeftX = batteryIconX;
+    if (showBatteryPercentage) {
+      // Clear a fixed-width area for the battery percentage to avoid ghosting when digit count changes (e.g. 100% ->
+      // 99%)
+      const int maxTextWidth = renderer.getTextWidth(SMALL_FONT_ID, "100%");
+      batteryGroupLeftX -= maxTextWidth + batteryPercentSpacing;
 
-    const int clearW = maxTextWidth + batteryPercentSpacing + RoundedRaffMetrics::values.batteryWidth;
-    const int clearH = std::max(renderer.getTextHeight(SMALL_FONT_ID), RoundedRaffMetrics::values.batteryHeight + 8);
-    renderer.fillRect(batteryIconX - maxTextWidth - batteryPercentSpacing, rect.y + 14, clearW, clearH, false);
+      const int clearW = maxTextWidth + batteryPercentSpacing + RoundedRaffMetrics::values.batteryWidth;
+      const int clearH = std::max(renderer.getTextHeight(SMALL_FONT_ID), RoundedRaffMetrics::values.batteryHeight + 8);
+      renderer.fillRect(batteryIconX - maxTextWidth - batteryPercentSpacing, rect.y + 14, clearW, clearH, false);
+    }
+
+    maxTitleWidth = std::max(0, batteryGroupLeftX - 20 - titleX);
+    drawBatteryRight(renderer,
+                     Rect{batteryIconX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth,
+                          RoundedRaffMetrics::values.batteryHeight},
+                     showBatteryPercentage);
   }
 
-  const int maxTitleWidth = std::max(0, batteryGroupLeftX - 20 - titleX);
   auto headerTitle = renderer.truncatedText(kTitleFontId, title, maxTitleWidth, EpdFontFamily::BOLD);
   renderer.drawText(kTitleFontId, titleX, titleY, headerTitle.c_str(), true, EpdFontFamily::BOLD);
-  drawBatteryRight(renderer,
-                   Rect{batteryIconX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth,
-                        RoundedRaffMetrics::values.batteryHeight},
-                   showBatteryPercentage);
 }
 
 namespace {

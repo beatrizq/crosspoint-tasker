@@ -231,6 +231,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
+  // Rotates the sleep screen 180 degrees, for a device held or mounted upside
+  // down (see SleepActivity::onEnter()). Not the same as the cover filter's
+  // Inverted option above, which flips black and white rather than the
+  // orientation.
+  uint8_t sleepScreenInvert = 0;
   // Status bar settings
   uint8_t statusBarChapterPageCount = 1;
   uint8_t statusBarBookProgressPercentage = 1;
@@ -312,16 +317,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t embeddedStyle = 1;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
-  // Reading companion: a small character whose mood tracks how much you read.
-  // Off by default so nothing about the stock reader changes unless asked for.
-  uint8_t companionEnabled = 0;
   // Index into companion::COMPANION_SPRITES (0 = the first companion).
   // Persisted numerically, so sprites/order.txt is append-only.
   uint8_t companionId = 0;
-  // Show the mood word and streak/progress line under the companion on Home
-  // (0 = off, 1 = on). Off gives the sprite the freed space to draw a scale
-  // step bigger.
-  uint8_t companionShowMoodLabel = 1;
   // Sleep window the companion shows the Sleeping mood during, local wall-clock
   // time. Default 22:00-07:00. May wrap past midnight (start > end); start ==
   // end means the window never applies (24 awake hours, not 24 asleep).

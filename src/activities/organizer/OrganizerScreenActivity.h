@@ -154,6 +154,14 @@ class OrganizerScreenActivity : public Activity {
   State state = State::LIST;
   const char* statusMessage = nullptr;  // Translated; only read in FAILED state
   int selectedIndex = 0;
+  // An extra stop bolted onto selectedIndex rather than folded into its own
+  // numbering, the same way tabBarFocused sits in front of QuickPickActivity's
+  // own row cursor: "previous" from selectedIndex == 0 lands here instead of
+  // wrapping to the last row, "next" from here returns to selectedIndex == 0,
+  // and "previous" from here wraps to the last row -- a two-segment circular
+  // loop (header, then tab-bar-and-rows) rather than QuickPickActivity's own
+  // three-segment one, since these screens have no companion-figure stop.
+  bool headerFocused = false;
 
   // The confirmation popup acts on the button going down, so the release lands
   // back here - in a screen where Select may complete a task. Set while that

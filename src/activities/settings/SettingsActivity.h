@@ -164,6 +164,11 @@ class SettingsActivity final : public Activity {
   int selectedCategoryIndex = 0;  // Currently selected category
   int selectedSettingIndex = 0;
   int settingsCount = 0;
+  // An extra stop bolted onto selectedSettingIndex, ahead of its own existing
+  // "0 == tab bar" stop -- the same idiom OrganizerScreenActivity's own
+  // headerFocused uses, just one level higher up: header, then tab bar
+  // (categories), then setting rows.
+  bool headerFocused = false;
 
   // Per-category settings derived from shared list + device-only actions
   std::vector<SettingInfo> displaySettings;
@@ -178,16 +183,6 @@ class SettingsActivity final : public Activity {
   // Set only by SettingAction::Network -- every other row here opens its own
   // activity, which owns its own WiFi/reboot lifecycle if it needs one.
   bool wifiActivated = false;
-  // Side Up/Down jump to the previous/next app in the home grid's own order
-  // -- the same shortcut every other app screen has (see
-  // OrganizerScreenActivity/QuickPickActivity's own identical block).
-  // Category-switching (this screen's own tab bar) is still reachable by
-  // navigating up to it and cycling with Confirm. Guarded by a fresh-press
-  // check, same reasoning as OrganizerScreenActivity's own upPressSeen/
-  // downPressSeen: a hold begun elsewhere should not fire an unintended jump
-  // the moment it is finally released here.
-  bool upPressSeen = false;
-  bool downPressSeen = false;
 
   OptionPopup optionPopup;
 

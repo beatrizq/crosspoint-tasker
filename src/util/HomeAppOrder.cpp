@@ -118,7 +118,9 @@ AppId adjacentVisibleApp(const AppId current, const bool forward) {
 #ifndef ENABLE_BLE_NOTIFY_SPIKE
     if (app.id == AppId::Notifications) continue;
 #endif
-    if (app.id == AppId::Companion && !SETTINGS.companionEnabled) continue;
+    // Never a grid tile any more (see HomeActivity::buildEntries()), so never
+    // a stop on this cycle either.
+    if (app.id == AppId::Settings) continue;
     visible[count++] = app.id;
   }
   if (count == 0) return current;

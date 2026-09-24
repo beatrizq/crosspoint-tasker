@@ -13,6 +13,9 @@
 class BleNotificationsActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   size_t selectorIndex = 0;
+  // An extra stop bolted onto selectorIndex, the same idiom
+  // OrganizerScreenActivity's own headerFocused uses.
+  bool headerFocused = false;
   // Set when a long-press has fired; input is swallowed until Confirm is
   // released again so the release doesn't also open the detail view Select
   // opens on a plain press -- same guard RecentBooksActivity uses for its own

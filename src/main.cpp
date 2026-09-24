@@ -36,6 +36,7 @@
 #include "YnabStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/home/CompanionSessionActivity.h"
 #include "activities/home/FocusSessionActivity.h"
 #include "activities/home/QuickPickActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
@@ -211,9 +212,6 @@ static bool loadSleepFrameBuffer() {
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
-  // QuickPickActivity keeps quickPickText/isHabit/poolEmpty current on its own
-  // (see its onEnter()); this flag just says whether that content is what was
-  // actually up when sleep was entered.
   APP_STATE.lastSleepFromQuickPick = activityManager.isQuickPickActivity();
 
   const bool isQuickResumeSleep =
@@ -504,12 +502,20 @@ void setup() {
         renderer, mappedInputManager, APP_STATE.focusSessionText, APP_STATE.focusSessionItemId,
         APP_STATE.focusSessionIsHabit, APP_STATE.focusSessionEndAbsMinutes, APP_STATE.focusSessionEndHour,
         APP_STATE.focusSessionEndMinute));
+  } else if (APP_STATE.companionSessionActive) {
+    // Same reasoning as the focus-session branch above, for a Companion
+    // screen Focus/Break session instead of a task/habit-linked one (see
+    // CompanionSessionActivity) -- no Back-held escape hatch, and whether
+    // the lock is actually still in effect is resolved by
+    // CompanionSessionActivity's own onEnter() against the wall clock.
+    activityManager.replaceActivity(std::make_unique<CompanionSessionActivity>(
+        renderer, mappedInputManager, static_cast<companion::Mood>(APP_STATE.companionSessionMood),
+        APP_STATE.companionSessionEndAbsMinutes, APP_STATE.companionSessionEndHour,
+        APP_STATE.companionSessionEndMinute));
   } else if (APP_STATE.lastSleepFromQuickPick && !mappedInputManager.isPressed(MappedInputManager::Button::Right1)) {
     // Same escape hatch as the reader branch below: holding Back on wake skips
-    // straight to home instead of putting the old pick back up.
-    activityManager.replaceActivity(std::make_unique<QuickPickActivity>(
-        renderer, mappedInputManager, APP_STATE.quickPickText, APP_STATE.quickPickItemId, APP_STATE.quickPickIsHabit,
-        APP_STATE.quickPickPoolEmpty));
+    // straight to home instead of reopening the companion screen.
+    activityManager.replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInputManager));
   } else if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
              mappedInputManager.isPressed(MappedInputManager::Button::Right1) ||
              APP_STATE.readerActivityLoadCount > 0) {

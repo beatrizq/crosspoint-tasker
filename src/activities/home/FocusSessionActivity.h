@@ -6,8 +6,9 @@
 #include "activities/Activity.h"
 
 /**
- * The locked countdown phase of a focus session: companion, speech bubble
- * holding the task/habit text, and "Focus session until hh:mm" underneath.
+ * The locked countdown phase of a focus session: companion (shown in its
+ * Focus pose for the whole session), speech bubble holding the task/habit
+ * text, and "Focus session until hh:mm" underneath.
  * Stays awake (preventAutoSleep()) and swallows Back and the Home gesture for
  * as long as it is locked -- a deliberate commitment device, not an oversight,
  * so there is no early-exit gesture to wire up.

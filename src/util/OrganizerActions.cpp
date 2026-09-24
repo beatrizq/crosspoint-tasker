@@ -25,7 +25,7 @@ void completeTask(const size_t cacheIndex) {
   // radio off; the row leaves the list immediately either way.
   TODOIST_TASKS.completeTaskAt(cacheIndex);
   TODOIST_TASKS.saveToFile();
-  // A completion is one of the two things the companion reacts to; credit it
+  // A completion is one of the things the companion's mood tracks; credit it
   // immediately rather than waiting for the next sync or Home visit.
   COMPANION.recordActivity();
 }
@@ -49,7 +49,7 @@ void logHabit(const size_t cacheIndex, const float amount) {
   LOG_DBG("ORGACT", "+%g to %s", static_cast<double>(amount), habits[cacheIndex].name.c_str());
   HABITIFY_HABITS.addPending(cacheIndex, amount);
   HABITIFY_HABITS.saveToFile();
-  // A completion is one of the two things the companion reacts to; credit it
+  // A completion is one of the things the companion's mood tracks; credit it
   // immediately in case this press is what pushed a habit to isComplete().
   COMPANION.recordActivity();
 }
@@ -62,7 +62,7 @@ void completeHabit(const size_t cacheIndex) {
   LOG_DBG("ORGACT", "Completing habit: %s", habits[cacheIndex].name.c_str());
   HABITIFY_HABITS.completeHabitAt(cacheIndex);
   HABITIFY_HABITS.saveToFile();
-  // A completion is one of the two things the companion reacts to; credit it
+  // A completion is one of the things the companion's mood tracks; credit it
   // immediately rather than waiting for the next sync or Home visit.
   COMPANION.recordActivity();
 }

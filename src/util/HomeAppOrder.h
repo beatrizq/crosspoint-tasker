@@ -42,14 +42,14 @@ enum class AppId : uint8_t {
   // just the spike one, so this table and the persisted order format stay
   // identical across build flavors.
   Notifications = 5,
-  // Only a real, selectable tile when SETTINGS.companionEnabled -- HomeActivity
-  // skips it from the grid otherwise, the same runtime-gated treatment
-  // Notifications gets at compile time. Its icon is dynamic (the companion's
-  // own current pose, not a static UIIcon -- see HomeActivity's own grid
-  // rendering), and its display name prefers its character's built-in name
-  // over this table's generic appName when no nickname is set -- see
-  // CompanionTracker::displayName(), which HomeActivity calls directly for
-  // this entry's label instead of this file's own displayName().
+  // Always enabled -- there is no companion on/off toggle any more (see
+  // CompanionSettingsActivity's own header comment); ActivityManager::
+  // goHome() opens the companion's own screen unconditionally. Its icon is
+  // dynamic (the companion's own current pose, not a static UIIcon -- see
+  // HomeActivity's own grid rendering, now unreachable but still compiled),
+  // and its display name prefers its character's built-in name over this
+  // table's generic appName when no nickname is set -- see
+  // CompanionTracker::displayName().
   Companion = 6,
   // Always a real, selectable tile -- unlike Notifications/Companion, there is
   // no condition it is ever hidden behind. Opens the same Settings screen the

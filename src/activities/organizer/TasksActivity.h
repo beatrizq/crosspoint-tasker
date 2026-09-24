@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "OrganizerScreenActivity.h"
+#include "TaskTabModel.h"
 
 /**
  * The Tasks screen: whatever the Todoist Filter setting matches, split by date.
@@ -16,28 +17,40 @@
  * partition the result - they no longer decide what it is, which is what the
  * hardcoded "overdue | due before: +30 days" used to do.
  *
- * All leads with the whole result. Overdue, Today and Upcoming then split the
- * dated tasks around the date the last sync settled on - before it, on it, after
- * it - and No date collects the rest. A purely date-based filter never returns
- * undated tasks, so No date is empty by construction for one; a filter like
- * "view all" fills all five.
+ * There is no "all tasks" tab: Overdue, Today and Upcoming split the dated tasks
+ * around the date the last sync settled on - before it, on it, after it - and
+ * No date collects the rest. A purely date-based filter never returns undated
+ * tasks, so No date is empty by construction for one; a filter like "view all"
+ * fills all four.
  *
  * The tab bar is built from what is actually there: a tab with no rows is left
  * out entirely, so an inbox with nothing overdue does not carry a dead Overdue
- * tab. All is the exception and always shows, being the one tab a successful sync
- * cannot leave empty. That makes the tab set change under the user - after a sync,
- * and after completing the last task in a tab - so it is rebuilt on both, holding
- * the same *kind* of tab selected rather than the same index.
+ * tab. That makes the tab set change under the user - after a sync, and after
+ * completing the last task in a tab - so it is rebuilt on both, holding the same
+ * *kind* of tab selected rather than the same index. Whichever tab is first is
+ * the default one the screen opens on (index 0).
  *
  * The three dated tabs are all empty until a sync establishes today: without it
  * there is no before, on or after, and filing a task under a guessed date is
- * worse than showing it only under All.
+ * worse than not filing it. With no All tab to catch them, dated tasks are
+ * simply not listed until that first sync settles the date.
+ *
+ * A trailing Logs tab always shows too: today's completed tasks, each row
+ * tagged Cached (a local completion not yet pushed -- Right2/Select undoes
+ * it) or Synced (a sync already confirmed it, nothing local left to undo).
+ * Absorbed from the old standalone Logs screen, which combined this with
+ * Habits' own completions; HabitsActivity's own Logs tab is the habit half.
+ * The tab set/row-matching rules (including Logs) live in TaskTabModel,
+ * shared with QuickPickActivity's own scaled-down embedded rendering of this
+ * same screen below the companion figure, so the two never disagree.
  */
 class TasksActivity final : public OrganizerScreenActivity {
  public:
   // What a tab holds. Not a tab index: which of these are on screen depends on
   // what the filter returned, so the two are mapped through `visibleTabs`.
-  enum class TabKind : uint8_t { ALL, OVERDUE, TODAY, UPCOMING, NO_DATE };
+  // See TaskTabModel.h -- shared with QuickPickActivity's own embedded tab
+  // bar.
+  using TabKind = taskTabModel::TaskTabKind;
 
   // selectTaskId, when non-empty, jumps straight to that task on first paint:
   // whichever tab it falls in, at its own row, rather than wherever
@@ -63,7 +76,8 @@ class TasksActivity final : public OrganizerScreenActivity {
 
   // The due date goes on a second line wherever it tells two rows apart. Not on
   // Today, where every row is due today and the line would repeat the tab's own
-  // name, and not on No date, where there is no date to draw.
+  // name, and not on No date, where there is no date to draw, and not on Logs,
+  // whose second line is the Cached/Synced tag instead (see drawRow()).
   bool rowsHaveSubtitle() const override;
   const char* rowConfirmLabel() const override;
   void onRowConfirm() override;
@@ -76,20 +90,31 @@ class TasksActivity final : public OrganizerScreenActivity {
   // The kind the active tab holds.
   TabKind currentKind() const { return kindAt(tab()); }
 
-  // Whether a task belongs to `kind`. ALL takes everything; the rest split the
-  // list around today, with No date taking the undated.
-  bool matchesKind(TabKind kind, size_t cacheIndex) const;
-  int countFor(TabKind kind) const;
+  // Thin delegations to TaskTabModel (shared with QuickPickActivity's own
+  // embedded tab bar -- see TaskTabModel.h).
+  bool matchesKind(TabKind kind, size_t cacheIndex) const { return taskTabModel::matchesKind(kind, cacheIndex); }
+  int countFor(TabKind kind) const { return taskTabModel::countFor(kind); }
 
   // Recomputes which tabs have rows, keeping the active *kind* selected where it
-  // survives and falling back to All where it does not. Also clamps the selection
+  // survives and falling back to the first tab where it does not. Also clamps the selection
   // into the new tab's row count, since a rebuild can shorten the list under it.
   void rebuildTabs();
 
-  // The cache index behind a visible row, or -1. Scanned rather than cached in a
-  // vector: the list is capped at TODOIST_MAX_TASKS, and a stored mapping would
-  // have to be rebuilt on every sync, tab switch and completion.
-  int cacheIndexForRow(int row) const;
+  // The cache index behind a visible row under one of the five real kinds,
+  // or -1 (including whenever the current kind is LOGS -- see
+  // logEntryIndexForRow() instead). Scanned rather than cached in a vector:
+  // the list is capped at TODOIST_MAX_TASKS, and a stored mapping would have
+  // to be rebuilt on every sync, tab switch and completion.
+  int cacheIndexForRow(int row) const { return taskTabModel::taskCacheIndexForRow(currentKind(), row); }
+  // The index into TODOIST_TASKS.getCompletedTodayEntries() behind visible
+  // Logs row `row`, or -1. Only meaningful when currentKind() == LOGS.
+  int logEntryIndexForRow(int row) const { return taskTabModel::logEntryIndexForRow(row); }
+
+  // Right2/Select on a Cached Logs row: undoes today's local completion via
+  // TodoistTaskCache::cancelCompletedLogEntry(), the same action the old
+  // standalone Logs screen offered. No-op on a Synced row (nothing local
+  // left to undo).
+  void clearSelectedLogRow();
 
   // Select opens this first, rather than completeSelectedTask() directly --
   // see rowConfirmLabel()/onRowConfirm().
@@ -110,8 +135,11 @@ class TasksActivity final : public OrganizerScreenActivity {
   // directly, no further confirmation - same immediacy as Complete.
   void clearTaskDueDate(int cacheIndex);
 
-  // Tabs currently on screen, in display order. Always leads with ALL.
-  std::vector<TabKind> visibleTabs{TabKind::ALL};
+  // Tabs currently on screen, in display order. Always ends with LOGS, so
+  // never empty once rebuildTabs() has run; until then this placeholder is
+  // OVERDUE, first in tab order, so "stay on the current tab" resolves to
+  // index 0 on that first rebuild whether or not Overdue currently exists.
+  std::vector<TabKind> visibleTabs{TabKind::OVERDUE};
 
   // See the constructor comment. Consumed and cleared in onEnter().
   std::string selectTaskId;

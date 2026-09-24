@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -124,7 +125,7 @@ class ActivityManager {
   // selectTaskId/selectHabitId, when non-empty, land the screen on that
   // specific task/habit's row instead of row 0 -- see TasksActivity's and
   // HabitsActivity's own constructor comments.
-  void goToTasks(uint8_t initialTab = 0, std::string selectTaskId = "");  // 0 = All
+  void goToTasks(uint8_t initialTab = 0, std::string selectTaskId = "");  // 0 = first tab
   void goToCalendar();
   void goToBudget(uint8_t initialTab = 0);  // 0 = Plan
   void goToHabits(std::string selectHabitId = "");
@@ -132,8 +133,11 @@ class ActivityManager {
   // BleNotifyRelay's own doc comment. HomeActivity never offers this tile
   // otherwise, so no caller outside that build should ever invoke it.
   void goToBleNotifications();
-  // Syncs every configured integration over one Wi-Fi association.
-  void goToSyncAll();
+  // Syncs every configured integration over one Wi-Fi association. onReturn
+  // reopens whichever screen's status bar this was reached from -- see
+  // SyncAllActivity's own comment; defaults to Home for a caller with no
+  // particular screen to return to.
+  void goToSyncAll(std::function<void()> onReturn = nullptr);
   void goToReadMenu();
   void goToBrowser(bool returnToReadMenu = false);
   void goToReader(std::string path, bool allowFastInitialRefresh = false);
@@ -142,12 +146,9 @@ class ActivityManager {
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE);
-  // Opens the companion screen fresh -- a new quickpick::roll(), the same
-  // "fresh visit" treatment HomeActivity::onEnter() gives its own tile (see
-  // its own homeSuggestionText comment) and main.cpp's boot-to-companion
-  // path use, rather than resuming whatever suggestion was last held. No-op
-  // when the companion is disabled -- see FRONT_BUTTON_HARDWARE/goToApp()'s
-  // own reasoning: nothing should call this for a hidden tile anyway.
+  // Opens the companion screen fresh -- the same screen goHome() itself
+  // opens (see QuickPickActivity's own header comment); this exists as its
+  // own entry point for goToApp()'s AppId::Companion case.
   void goToCompanion();
   // Dispatches to whichever of the goTo* methods above opens `id`'s own
   // screen -- the side Left/Right "previous/next app" shortcut every app

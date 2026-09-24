@@ -178,60 +178,69 @@ void LyraTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
 }
 
 void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
-                           const bool showRule) const {
+                           const bool showRule, const bool includeStatusRow) const {
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
 
-  // Drawn directly (not via drawBatteryRight(), which hardcodes SMALL_FONT_ID
-  // for its own percentage text) so the percentage matches this row's own
-  // bigger UI_10_FONT_ID, the same reasoning the clock text below already
-  // gets -- and the icon itself is sized up to match (headerBatteryWidth/
-  // Height, see its own comment).
-  const bool showBatteryPercentage =
-      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  const int batteryX = rect.x + rect.width - 12 - headerBatteryWidth;
-  const int batteryTextY = rect.y + 5;
-  if (showBatteryPercentage) {
-    const auto percentageText = std::to_string(powerManager.getBatteryPercentage()) + "%";
-    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, percentageText.c_str());
-    renderer.drawText(UI_10_FONT_ID, batteryX - textWidth - batteryPercentSpacing, batteryTextY,
-                      percentageText.c_str());
-  }
-  const int batteryIconY = batteryTextY + 6;
-  drawBatteryOutline(renderer, batteryX, batteryIconY, headerBatteryWidth, headerBatteryHeight);
-  fillBatteryIcon(renderer, Rect{batteryX, batteryIconY, headerBatteryWidth, headerBatteryHeight},
-                  powerManager.getBatteryPercentage());
-
-  // Clock, mirroring the battery on the opposite corner. Silently absent when
-  // there is no usable time yet (no hardware RTC and never NTP-synced this
-  // power session) rather than showing a stale or garbage value. Today's date
-  // rides alongside it, middle-dot separated (same glyph and spacing
-  // QuickPickActivity's own age/highscore status line used to use), in the
-  // same "Mon 17 Aug" format Tasks/Calendar/Budget/Habits already use for
-  // their own header date (organizer::formatDayLabel) -- silently dropped
-  // along with the time when the clock isn't usable yet, same as the time
-  // itself. UI_10_FONT_ID and the clock icon match QuickPickActivity's own
-  // glance-strip rows (icon + slightly larger text than the old SMALL_FONT_ID
-  // reading), so this row reads as the same family across every screen that
-  // calls drawHeader(), not just the companion screen.
-  char timeBuf[9];
-  if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
-    char headerClock[32];
-    strlcpy(headerClock, timeBuf, sizeof(headerClock));
-
-    uint16_t year = 0;
-    uint8_t month = 0;
-    uint8_t day = 0;
-    uint8_t hour = 0;
-    uint8_t minute = 0;
-    if (halClock.getUtcDateTime(year, month, day, hour, minute)) {
-      char dateBuf[16];
-      organizer::formatDayLabel(civil::packDate(year, month, day), dateBuf, sizeof(dateBuf));
-      snprintf(headerClock, sizeof(headerClock), "%s  \xC2\xB7  %s", timeBuf, dateBuf);
+  // A second, embedded header drawn mid-screen (QuickPickActivity's own
+  // scaled-down Tasks section below the companion figure) skips this whole
+  // clock/date/battery row -- it already has one at the top of the screen,
+  // and repeating it here would just duplicate that chrome.
+  if (includeStatusRow) {
+    // Drawn directly (not via drawBatteryRight(), which hardcodes SMALL_FONT_ID
+    // for its own percentage text) so the percentage matches this row's own
+    // bigger UI_10_FONT_ID, the same reasoning the clock text below already
+    // gets -- and the icon itself is sized up to match (headerBatteryWidth/
+    // Height, see its own comment).
+    const bool showBatteryPercentage =
+        SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
+    const int batteryX = rect.x + rect.width - 12 - headerBatteryWidth;
+    const int batteryTextY = rect.y + 5;
+    if (showBatteryPercentage) {
+      const auto percentageText = std::to_string(powerManager.getBatteryPercentage()) + "%";
+      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, percentageText.c_str());
+      renderer.drawText(UI_10_FONT_ID, batteryX - textWidth - batteryPercentSpacing, batteryTextY,
+                        percentageText.c_str());
     }
-    const int clockIconX = rect.x + LyraMetrics::values.contentSidePadding;
-    drawClockIcon(renderer, clockIconX, rect.y + 5, headerClockIconSize);
-    renderer.drawText(UI_10_FONT_ID, clockIconX + headerClockIconSize + headerClockIconGap, rect.y + 5, headerClock,
-                      true);
+    // Centred against the percentage text's own line height, the same
+    // convention the glance strip's bullet/text rows already use -- the old
+    // fixed "+6" sat the icon visibly lower than the text next to it.
+    const int batteryIconY = batteryTextY + (renderer.getLineHeight(UI_10_FONT_ID) - headerBatteryHeight) / 2;
+    drawBatteryOutline(renderer, batteryX, batteryIconY, headerBatteryWidth, headerBatteryHeight);
+    fillBatteryIcon(renderer, Rect{batteryX, batteryIconY, headerBatteryWidth, headerBatteryHeight},
+                    powerManager.getBatteryPercentage());
+
+    // Clock, mirroring the battery on the opposite corner. Silently absent when
+    // there is no usable time yet (no hardware RTC and never NTP-synced this
+    // power session) rather than showing a stale or garbage value. Today's date
+    // rides alongside it, middle-dot separated (same glyph and spacing
+    // QuickPickActivity's own age/highscore status line used to use), in the
+    // same "Mon 17 Aug" format Tasks/Calendar/Budget/Habits already use for
+    // their own header date (organizer::formatDayLabel) -- silently dropped
+    // along with the time when the clock isn't usable yet, same as the time
+    // itself. UI_10_FONT_ID and the clock icon match QuickPickActivity's own
+    // glance-strip rows (icon + slightly larger text than the old SMALL_FONT_ID
+    // reading), so this row reads as the same family across every screen that
+    // calls drawHeader(), not just the companion screen.
+    char timeBuf[9];
+    if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+      char headerClock[32];
+      strlcpy(headerClock, timeBuf, sizeof(headerClock));
+
+      uint16_t year = 0;
+      uint8_t month = 0;
+      uint8_t day = 0;
+      uint8_t hour = 0;
+      uint8_t minute = 0;
+      if (halClock.getUtcDateTime(year, month, day, hour, minute)) {
+        char dateBuf[16];
+        organizer::formatDayLabel(civil::packDate(year, month, day), dateBuf, sizeof(dateBuf));
+        snprintf(headerClock, sizeof(headerClock), "%s  \xC2\xB7  %s", timeBuf, dateBuf);
+      }
+      const int clockIconX = rect.x + LyraMetrics::values.contentSidePadding;
+      drawClockIcon(renderer, clockIconX, rect.y + 5, headerClockIconSize);
+      renderer.drawText(UI_10_FONT_ID, clockIconX + headerClockIconSize + headerClockIconGap, rect.y + 5, headerClock,
+                        true);
+    }
   }
 
   int maxTitleWidth = title != nullptr ? renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD) : 0;
@@ -257,21 +266,27 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   }
 
   if (title) {
+    // No status row reserved above when includeStatusRow is false -- the
+    // title sits near the top of `rect` instead of leaving that space blank.
+    const int titleY = includeStatusRow ? rect.y + LyraMetrics::values.batteryBarHeight + 3 : rect.y + 3;
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
-    renderer.drawText(UI_12_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding,
-                      rect.y + LyraMetrics::values.batteryBarHeight + 3, truncatedTitle.c_str(), true,
-                      EpdFontFamily::BOLD);
+    renderer.drawText(UI_12_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding, titleY, truncatedTitle.c_str(),
+                      true, EpdFontFamily::BOLD);
     if (showRule) {
       renderer.drawLine(rect.x, rect.y + rect.height - 3, rect.x + rect.width - 1, rect.y + rect.height - 3, 3, true);
     }
   }
 
   if (subtitle) {
+    // Same +7 offset from the title's own baseline either way, so the two
+    // stay on one visual row regardless of includeStatusRow -- matches the
+    // original rect.y+43 (title) / rect.y+50 (subtitle) relationship.
+    const int subtitleY = includeStatusRow ? rect.y + 50 : rect.y + 10;
     auto truncatedSubtitle = renderer.truncatedText(SMALL_FONT_ID, subtitle, maxSubtitleWidth, EpdFontFamily::REGULAR);
     int truncatedSubtitleWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedSubtitle.c_str());
     renderer.drawText(SMALL_FONT_ID,
-                      rect.x + rect.width - LyraMetrics::values.contentSidePadding - truncatedSubtitleWidth,
-                      rect.y + 50, truncatedSubtitle.c_str(), true);
+                      rect.x + rect.width - LyraMetrics::values.contentSidePadding - truncatedSubtitleWidth, subtitleY,
+                      truncatedSubtitle.c_str(), true);
   }
 }
 
@@ -582,55 +597,91 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   renderer.setOrientation(orig_orientation);
 }
 
-void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
+void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn,
+                                    const bool topSelected, const bool bottomSelected) const {
   if (gpio.hasTouch()) {
     return;
   }
 
   const int screenWidth = renderer.getScreenWidth();
   constexpr int buttonWidth = LyraMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
-  constexpr int buttonHeight = 78;                                       // Height on screen (width when rotated)
+  constexpr int minButtonHeight = 78;   // Floor for a box -- a short label doesn't shrink it below this
+  constexpr int stackPadding = 8;       // Above and below the stacked letters, inside the border
+  constexpr int stackLineAdvance = 20;  // Letter-to-letter distance (the font's own line height is 23)
   constexpr int buttonMargin = 0;
 
+  // A box grows to fit its label's stacked letters (one per line, see
+  // GfxRenderer::drawTextStacked) rather than staying a fixed height, so the
+  // border always encloses the whole label. An empty label falls back to the
+  // floor, which keeps the X4 layout below where it was.
+  const auto boxHeightFor = [&](const char* label) {
+    return std::max(minButtonHeight,
+                    renderer.getTextStackedHeight(SMALL_FONT_ID, label, stackLineAdvance) + 2 * stackPadding);
+  };
+
+  // A selected label is drawn inverted -- white letters on a black fill of the
+  // same shape as its border -- so it reads as the current choice.
   if (gpio.deviceIsX3()) {
     // X3 layout: Up on left side, Down on right side, positioned higher
-    constexpr int x3ButtonY = 155;
+    // The physical buttons don't move: the original minButtonHeight-tall box
+    // started at y=155, so that's where its centre sat. A taller box grows
+    // symmetrically around that centre (not downward from y=155), so the
+    // label stays centred on the button.
+    constexpr int x3ButtonCenterY = 155 + minButtonHeight / 2;
 
     if (topBtn != nullptr && topBtn[0] != '\0') {
-      renderer.drawRoundedRect(buttonMargin, x3ButtonY, buttonWidth, buttonHeight, 1, cornerRadius, false, true, false,
-                               true, true);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, topBtn);
-      renderer.drawTextRotated90CW(SMALL_FONT_ID, buttonMargin, x3ButtonY + (buttonHeight + textWidth) / 2, topBtn);
+      const int height = boxHeightFor(topBtn);
+      const int top = x3ButtonCenterY - height / 2;
+      if (topSelected) {
+        renderer.fillRoundedRect(buttonMargin, top, buttonWidth, height, cornerRadius, false, true, false, true,
+                                 Color::Black);
+      }
+      renderer.drawRoundedRect(buttonMargin, top, buttonWidth, height, 1, cornerRadius, false, true, false, true, true);
+      renderer.drawTextStacked(SMALL_FONT_ID, buttonMargin + buttonWidth / 2, x3ButtonCenterY, topBtn, stackLineAdvance,
+                               /*black=*/!topSelected);
     }
 
     if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
+      const int height = boxHeightFor(bottomBtn);
+      const int top = x3ButtonCenterY - height / 2;
       const int rightX = screenWidth - buttonWidth;
-      renderer.drawRoundedRect(rightX, x3ButtonY, buttonWidth, buttonHeight, 1, cornerRadius, true, false, true, false,
-                               true);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, bottomBtn);
-      renderer.drawTextRotated90CW(SMALL_FONT_ID, rightX, x3ButtonY + (buttonHeight + textWidth) / 2, bottomBtn);
+      if (bottomSelected) {
+        renderer.fillRoundedRect(rightX, top, buttonWidth, height, cornerRadius, true, false, true, false,
+                                 Color::Black);
+      }
+      renderer.drawRoundedRect(rightX, top, buttonWidth, height, 1, cornerRadius, true, false, true, false, true);
+      renderer.drawTextStacked(SMALL_FONT_ID, rightX + buttonWidth / 2, x3ButtonCenterY, bottomBtn, stackLineAdvance,
+                               /*black=*/!bottomSelected);
     }
   } else {
     // X4 layout: Both buttons stacked on right side
-    const char* labels[] = {topBtn, bottomBtn};
     const int x = screenWidth - buttonWidth;
+    const int topHeight = boxHeightFor(topBtn);
+    const int bottomHeight = boxHeightFor(bottomBtn);
+    // The second box starts below the first one's own (variable) height plus
+    // the 5px gap between them.
+    const int bottomTop = topHintButtonY + topHeight + 5;
 
     if (topBtn != nullptr && topBtn[0] != '\0') {
-      renderer.drawRoundedRect(x, topHintButtonY, buttonWidth, buttonHeight, 1, cornerRadius, true, false, true, false,
+      if (topSelected) {
+        renderer.fillRoundedRect(x, topHintButtonY, buttonWidth, topHeight, cornerRadius, true, false, true, false,
+                                 Color::Black);
+      }
+      renderer.drawRoundedRect(x, topHintButtonY, buttonWidth, topHeight, 1, cornerRadius, true, false, true, false,
                                true);
+      renderer.drawTextStacked(SMALL_FONT_ID, x + buttonWidth / 2, topHintButtonY + topHeight / 2, topBtn,
+                               stackLineAdvance, /*black=*/!topSelected);
     }
 
     if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-      renderer.drawRoundedRect(x, topHintButtonY + buttonHeight + 5, buttonWidth, buttonHeight, 1, cornerRadius, true,
-                               false, true, false, true);
-    }
-
-    for (int i = 0; i < 2; i++) {
-      if (labels[i] != nullptr && labels[i][0] != '\0') {
-        const int y = topHintButtonY + (i * buttonHeight) + 5;
-        const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
-        renderer.drawTextRotated90CW(SMALL_FONT_ID, x, y + (buttonHeight + textWidth) / 2, labels[i]);
+      if (bottomSelected) {
+        renderer.fillRoundedRect(x, bottomTop, buttonWidth, bottomHeight, cornerRadius, true, false, true, false,
+                                 Color::Black);
       }
+      renderer.drawRoundedRect(x, bottomTop, buttonWidth, bottomHeight, 1, cornerRadius, true, false, true, false,
+                               true);
+      renderer.drawTextStacked(SMALL_FONT_ID, x + buttonWidth / 2, bottomTop + bottomHeight / 2, bottomBtn,
+                               stackLineAdvance, /*black=*/!bottomSelected);
     }
   }
 }

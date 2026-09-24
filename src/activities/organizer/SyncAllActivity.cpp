@@ -149,7 +149,11 @@ void SyncAllActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right1) ||
       mappedInput.wasReleased(MappedInputManager::Button::Right2)) {
-    onGoHome();
+    if (onReturn) {
+      onReturn();
+    } else {
+      onGoHome();
+    }
   }
 }
 

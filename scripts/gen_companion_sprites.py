@@ -39,13 +39,15 @@ import sys
 
 WIDTH = 34
 HEIGHT = 30
-# "milestone" and "sleeping" are moods like the rest: their own art block,
-# generated the same way as happy/satisfied/cranky/neglected. Neither is ever
-# returned by the ladder in CompanionMood (evaluate() only ever yields the
-# first four); callers apply them as overrides -- milestone when the best-ever
-# single-day tasks+habits total is beaten, sleeping during the configured
-# sleep window.
-MOODS = ["happy", "satisfied", "cranky", "neglected", "milestone", "sleeping"]
+# "milestone", "sleeping", "focus" and "break" are moods like the rest: their
+# own art block, generated the same way as happy/satisfied/cranky/neglected.
+# None of the four is ever returned by the ladder in CompanionMood
+# (evaluate() only ever yields the first four); callers apply them as
+# overrides -- milestone when the best-ever single-day tasks+habits total is
+# beaten, sleeping during the configured sleep window, focus for the whole of
+# a focus session (FocusSessionActivity), and break while the synced task
+# list is empty (CompanionTracker::currentMood()).
+MOODS = ["happy", "satisfied", "cranky", "neglected", "milestone", "sleeping", "focus", "break"]
 VALID_CELLS = set(".#wod")
 
 

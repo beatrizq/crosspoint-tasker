@@ -13,7 +13,6 @@
 #include "browser/OpdsBookBrowserActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
-#include "home/HomeActivity.h"
 #include "home/ReadMenuActivity.h"
 #include "home/RecentBooksActivity.h"
 #include "network/CrossPointWebServerActivity.h"
@@ -21,7 +20,6 @@
 #ifdef ENABLE_BLE_NOTIFY_SPIKE
 #include "network/BleNotificationsActivity.h"
 #endif
-#include "companion/QuickPickRoll.h"
 #include "home/QuickPickActivity.h"
 #include "organizer/BudgetActivity.h"
 #include "organizer/CalendarActivity.h"
@@ -80,7 +78,7 @@ void ActivityManager::renderTaskLoop() {
 
 void ActivityManager::loop() {
   if (currentActivity) {
-    if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
+    if (!currentActivity->isQuickPickActivity() && mappedInput.wasHomeGesture()) {
       if (currentActivity->handleHomeGesture()) {
         return;
       }
@@ -224,7 +222,9 @@ void ActivityManager::goToHabits(std::string selectHabitId) {
   replaceActivity(std::make_unique<HabitsActivity>(renderer, mappedInput, std::move(selectHabitId)));
 }
 
-void ActivityManager::goToSyncAll() { replaceActivity(std::make_unique<SyncAllActivity>(renderer, mappedInput)); }
+void ActivityManager::goToSyncAll(std::function<void()> onReturn) {
+  replaceActivity(std::make_unique<SyncAllActivity>(renderer, mappedInput, std::move(onReturn)));
+}
 
 #ifdef ENABLE_BLE_NOTIFY_SPIKE
 void ActivityManager::goToBleNotifications() {
@@ -282,30 +282,19 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 }
 
 void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
-  if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
-    const auto& activityName = currentActivity->name;
-    if (activityName == "FileBrowser") {
-      initialMenuItem = HomeMenuItem::FILE_BROWSER;
-    } else if (activityName == "RecentBooks") {
-      initialMenuItem = HomeMenuItem::RECENTS;
-    } else if (activityName == "OpdsBookBrowser") {
-      initialMenuItem = HomeMenuItem::OPDS_BROWSER;
-    } else if (activityName == "CrossPointWebServer") {
-      initialMenuItem = HomeMenuItem::FILE_TRANSFER;
-    } else if (activityName == "Settings") {
-      initialMenuItem = HomeMenuItem::SETTINGS_MENU;
-    }
-  }
-  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
+  // Home is the companion's own screen now, not the app-tile grid (see
+  // QuickPickActivity's own header comment) -- HomeActivity is left fully
+  // intact but unreachable, so this is the one place that changed rather
+  // than every one of this function's 25+ callers. QuickPickActivity has no
+  // grid to preselect a tile on, so initialMenuItem (still passed by several
+  // callers, e.g. OrganizerScreenActivity's own homeItem()) is simply
+  // ignored now rather than plumbed through -- harmless, not broken.
+  (void)initialMenuItem;
+  replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInput));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 
-void ActivityManager::goToCompanion() {
-  if (!SETTINGS.companionEnabled) return;
-  const auto rolled = quickpick::roll();
-  replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInput, rolled.text, rolled.itemId, rolled.isHabit,
-                                                      rolled.poolEmpty));
-}
+void ActivityManager::goToCompanion() { replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInput)); }
 
 void ActivityManager::goToApp(const homeAppOrder::AppId id) {
   switch (id) {

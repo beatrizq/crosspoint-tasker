@@ -216,6 +216,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
                           {StrId::STR_NONE_OPT, StrId::STR_FILTER_CONTRAST, StrId::STR_INVERTED},
                           "sleepScreenCoverFilter", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Toggle(StrId::STR_INVERT_SLEEP_SCREEN, &CrossPointSettings::sleepScreenInvert, "sleepScreenInvert",
+                            StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_QUICK_RESUME_TIMEOUT, &CrossPointSettings::quickResumeSleepScreen,
                           {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "quickResumeSleepScreen",
                           StrId::STR_CAT_DISPLAY),
@@ -237,10 +239,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             StrId::STR_CAT_DISPLAY),
 
         // --- Companion (persisted here, rendered by its own dedicated screen) ---
-        SettingInfo::Toggle(StrId::STR_COMPANION_ENABLED, &CrossPointSettings::companionEnabled, "companionEnabled",
-                            StrId::STR_COMPANION),
-        SettingInfo::Toggle(StrId::STR_COMPANION_SHOW_MOOD_LABEL, &CrossPointSettings::companionShowMoodLabel,
-                            "companionShowMoodLabel", StrId::STR_COMPANION),
+        // No enabled/disabled toggle -- the companion's screen is Home (see
+        // ActivityManager::goHome()), so it is always active. No mood-label
+        // toggle either -- the mood label itself was removed from that screen.
         // Sleep window, local wall-clock time -- rendered on-device as two HH:MM
         // rows (CompanionSettingsActivity), but persisted here as four plain
         // bytes since that is what toJson()/fromJson() walk by key.

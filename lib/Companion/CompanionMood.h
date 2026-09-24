@@ -7,15 +7,30 @@
 // exercised by host unit tests before it ever reaches the device.
 namespace companion {
 
-// Milestone and Sleeping are not ladder outcomes -- evaluate() never returns
-// either. Both are external overrides callers apply ahead of the ladder:
-// Milestone for one paint when the best-ever single-day tasks+habits total is
-// beaten (see CompanionState::milestoneDay), the same way the old milestone
-// quote used to override which line was said rather than which mood earned
-// it; Sleeping for as long as the wall clock sits inside the user's
-// configured sleep window, taking priority even over Milestone since a
-// sleeping companion should not also be shown celebrating.
-enum class Mood : uint8_t { Happy = 0, Satisfied = 1, Cranky = 2, Neglected = 3, Milestone = 4, Sleeping = 5 };
+// Milestone, Sleeping, Focus and Break are not ladder outcomes -- evaluate()
+// never returns any of them. All four are external overrides callers apply
+// ahead of the ladder: Milestone for one paint when the best-ever single-day
+// tasks+habits total is beaten (see CompanionState::milestoneDay), the same
+// way the old milestone quote used to override which line was said rather
+// than which mood earned it; Sleeping for as long as the wall clock sits
+// inside the user's configured sleep window, taking priority even over
+// Milestone since a sleeping companion should not also be shown celebrating.
+// Focus and Break (see src/companion/sprites/pancake.grid for their art) are
+// overrides too. Focus is drawn directly by FocusSessionActivity for the
+// whole of a focus session, never via CompanionTracker::currentMood().
+// Break is what currentMood() returns while the synced task list is empty --
+// everything done, nothing left to do -- ahead of Milestone but behind
+// Sleeping.
+enum class Mood : uint8_t {
+  Happy = 0,
+  Satisfied = 1,
+  Cranky = 2,
+  Neglected = 3,
+  Milestone = 4,
+  Sleeping = 5,
+  Focus = 6,
+  Break = 7
+};
 
 // Tunables kept in one struct so tests can pin behaviour without rebuilding the
 // firmware defaults. Tasks and habits are weighted identically -- each

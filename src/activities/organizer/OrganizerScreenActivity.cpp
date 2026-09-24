@@ -41,6 +41,7 @@ void OrganizerScreenActivity::onEnter() {
   // home tile, and a tab out of range would index the label array.
   if (activeTab < 0 || activeTab >= tabCount()) activeTab = 0;
   selectedIndex = 0;
+  headerFocused = false;
   requestUpdate();
 }
 
@@ -211,6 +212,14 @@ void OrganizerScreenActivity::loop() {
       swallowBackRelease = false;
       return;
     }
+    // Two-level Back: from a row it first surfaces the cursor to the tab bar
+    // (labelled Back, see render()); only from the tab bar or the header does
+    // it leave the screen (labelled Home).
+    if (state == State::LIST && !headerFocused && selectedIndex > 0) {
+      selectedIndex = 0;
+      requestUpdate();
+      return;
+    }
     onGoHome(homeItem());
     return;
   }
@@ -223,6 +232,13 @@ void OrganizerScreenActivity::loop() {
       // The tail of the press that answered the confirmation prompt. Acting on
       // it would reopen the prompt, and cancelling would reopen it again.
       swallowConfirmRelease = false;
+      return;
+    }
+    if (headerFocused) {
+      // Captured by value, not this: appId() has to be read now, while this
+      // screen still exists -- goToSyncAll()'s own replaceActivity() call
+      // destroys it before the lambda ever runs.
+      activityManager.goToSyncAll([id = appId()] { activityManager.goToApp(id); });
       return;
     }
     if (state == State::FAILED) {
@@ -337,24 +353,43 @@ void OrganizerScreenActivity::loop() {
 
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
+    // A swipe is a page-jump, not a single step, so it always leaves the
+    // header stop (if it was focused) rather than trying to fold it into
+    // the page math below.
+    headerFocused = false;
     selectedIndex = selectedIndex == 0 ? std::min(1, navCount - 1)
                                        : ButtonNavigator::nextPageIndex(selectedIndex, navCount, perPage);
     requestUpdate();
     return;
   }
   if (swipe == MappedInputManager::SwipeDir::Down) {
+    headerFocused = false;
     selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, navCount, perPage);
     requestUpdate();
     return;
   }
 
   buttonNavigator.onNext([this, navCount] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, navCount);
+    if (headerFocused) {
+      headerFocused = false;
+      selectedIndex = 0;
+    } else if (selectedIndex == navCount - 1) {
+      headerFocused = true;
+    } else {
+      selectedIndex = ButtonNavigator::nextIndex(selectedIndex, navCount);
+    }
     requestUpdate();
   });
 
   buttonNavigator.onPrevious([this, navCount] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, navCount);
+    if (headerFocused) {
+      headerFocused = false;
+      selectedIndex = navCount - 1;
+    } else if (selectedIndex == 0) {
+      headerFocused = true;
+    } else {
+      selectedIndex = ButtonNavigator::previousIndex(selectedIndex, navCount);
+    }
     requestUpdate();
   });
 }
@@ -372,14 +407,20 @@ void OrganizerScreenActivity::render(RenderLock&&) {
   char status[64];
   status[0] = '\0';
   formatStatus(status, sizeof(status));
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, screenTitle(),
-                 status[0] == '\0' ? nullptr : status);
+  const Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  GUI.drawHeader(renderer, headerRect, screenTitle(), status[0] == '\0' ? nullptr : status);
+  // Hovering the header (see headerFocused's own comment): a true pixel
+  // invert, the same technique QuickPickActivity's own header focus uses.
+  if (headerFocused) {
+    renderer.invertRect(headerRect.x, headerRect.y, headerRect.width,
+                        std::min(HEADER_FOCUS_HIGHLIGHT_HEIGHT, headerRect.height));
+  }
 
   std::vector<TabInfo> tabs;
   tabs.reserve(tabCount());
   for (int i = 0; i < tabCount(); i++) tabs.push_back(TabInfo{tabLabel(i), i == activeTab});
   GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
-                 selectedIndex == 0);
+                 selectedIndex == 0 && !headerFocused);
 
   const int top = listTop();
   const int itemCount = rowCount();
@@ -417,7 +458,7 @@ void OrganizerScreenActivity::render(RenderLock&&) {
       const int index = pageStart + row;
       if (index >= itemCount) break;
       const int rowY = top + row * rowHeight;
-      const bool selected = index == selectedRow();
+      const bool selected = !headerFocused && index == selectedRow();
 
       if (selected) {
         renderer.fillRect(0, rowY, pageWidth, rowHeight);
@@ -448,7 +489,9 @@ void OrganizerScreenActivity::render(RenderLock&&) {
   // a row. Syncing on a multi-tab screen is a hold on the tab bar, and lives
   // nowhere else.
   const char* confirmLabel;
-  if (state == State::SYNCING) {
+  if (headerFocused) {
+    confirmLabel = tr(STR_SYNC_ALL);
+  } else if (state == State::SYNCING) {
     confirmLabel = "";
   } else if (state == State::FAILED) {
     confirmLabel = tr(STR_OK_BUTTON);
@@ -463,8 +506,11 @@ void OrganizerScreenActivity::render(RenderLock&&) {
     confirmLabel = "";
   }
   const bool navigable = state == State::LIST;
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), confirmLabel, navigable ? tr(STR_DIR_UP) : "",
-                                            navigable ? tr(STR_DIR_DOWN) : "");
+  // Back on a row (it surfaces to the tab bar), Home once already there or on
+  // the header -- see loop()'s own Right1 handler.
+  const bool rowFocused = navigable && !headerFocused && selectedIndex > 0;
+  const auto labels = mappedInput.mapLabels(rowFocused ? tr(STR_BACK) : tr(STR_HOME), confirmLabel,
+                                            navigable ? tr(STR_DIR_UP) : "", navigable ? tr(STR_DIR_DOWN) : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

@@ -22,6 +22,7 @@
 #include "RescheduleTaskActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/OptionsMenuActivity.h"
+#include "companion/CompanionTracker.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/HomeAppOrder.h"
@@ -54,11 +55,10 @@ void TasksActivity::onEnter() {
   // default selection (tab 0, row 0) rather than landing on nothing.
   if (targetCacheIndex < 0) return;
 
-  // ALL (always visibleTabs[0]) matches everything, so it is only used as the
-  // fallback -- a more specific tab, when one matches, is what the task
-  // actually belongs to.
+  // The first tab the task matches; a task that matches none (a dated one
+  // before any sync has settled today, say) stays on the default tab 0.
   int targetTab = 0;
-  for (size_t t = 1; t < visibleTabs.size(); t++) {
+  for (size_t t = 0; t < visibleTabs.size(); t++) {
     if (matchesKind(visibleTabs[t], static_cast<size_t>(targetCacheIndex))) {
       targetTab = static_cast<int>(t);
       break;
@@ -78,50 +78,20 @@ void TasksActivity::onEnter() {
 const char* TasksActivity::screenTitle() const { return homeAppOrder::displayName(homeAppOrder::AppId::Tasks); }
 
 TasksActivity::TabKind TasksActivity::kindAt(const int index) const {
-  if (index < 0 || static_cast<size_t>(index) >= visibleTabs.size()) return TabKind::ALL;
+  if (index < 0 || static_cast<size_t>(index) >= visibleTabs.size()) return visibleTabs.front();
   return visibleTabs[static_cast<size_t>(index)];
 }
 
-const char* TasksActivity::tabLabel(const int index) const {
-  switch (kindAt(index)) {
-    case TabKind::ALL:
-      return tr(STR_TASKS_TAB_ALL);
-    case TabKind::OVERDUE:
-      return tr(STR_OVERDUE);
-    case TabKind::TODAY:
-      return tr(STR_TODAY);
-    case TabKind::UPCOMING:
-      return tr(STR_TASKS_TAB_UPCOMING);
-    case TabKind::NO_DATE:
-      return tr(STR_TASKS_TAB_NO_DATE);
-  }
-  return "";
-}
+const char* TasksActivity::tabLabel(const int index) const { return taskTabModel::tabLabel(kindAt(index)); }
 
 void TasksActivity::rebuildTabs() {
   // The kind selected now, so the same tab stays under the user across a rebuild
   // even though its index may move when a tab ahead of it appears or goes.
   const TabKind wanted = currentKind();
-
-  visibleTabs.clear();
-  visibleTabs.reserve(5);
-  // All always shows: it is the whole filter result, and the one tab a successful
-  // sync cannot leave empty. The rest earn their place by having rows, so an
-  // inbox with nothing overdue carries no dead Overdue tab.
-  visibleTabs.push_back(TabKind::ALL);
-  for (const TabKind kind : {TabKind::OVERDUE, TabKind::TODAY, TabKind::UPCOMING, TabKind::NO_DATE}) {
-    if (countFor(kind) > 0) visibleTabs.push_back(kind);
-  }
-
-  int restored = 0;
-  for (size_t i = 0; i < visibleTabs.size(); i++) {
-    if (visibleTabs[i] == wanted) {
-      restored = static_cast<int>(i);
-      break;
-    }
-  }
-  // Falls back to All when the selected kind just emptied - completing the last
-  // overdue task, say, which takes its tab away while the user is standing on it.
+  const int restored = taskTabModel::rebuildVisibleTabs(wanted, visibleTabs);
+  // Falls back to the first tab when the selected kind just emptied - completing
+  // the last overdue task, say, which takes its tab away while the user is
+  // standing on it.
   setTab(restored);
 
   // The new tab's list can be shorter than the old one, so the row selection has
@@ -133,65 +103,24 @@ void TasksActivity::rebuildTabs() {
 
 // -- rows -------------------------------------------------------------------
 
-bool TasksActivity::matchesKind(const TabKind kind, const size_t cacheIndex) const {
-  const auto& tasks = TODOIST_TASKS.getTasks();
-  if (cacheIndex >= tasks.size()) return false;
-  const TodoistTask& task = tasks[cacheIndex];
-
-  // Today, as the last sync settled it. DUE_NONE when nothing has synced or the
-  // date could not be established, which is why the three dated tabs check it:
-  // without today there is no before, on, or after to sort a task into, and
-  // guessing would file it under the wrong one.
-  const uint16_t today = todoist::dueDaysFromIso(TODOIST_TASKS.getSyncDate().c_str());
-  const bool dated = task.dueDays != todoist::DUE_NONE;
-  const bool knowToday = today != todoist::DUE_NONE;
-
-  switch (kind) {
-    case TabKind::ALL:
-      return true;
-    case TabKind::OVERDUE:
-      // The cache owns this flag, against the same date, so the tab agrees with
-      // the overdue count in the header by construction.
-      return task.overdue;
-    case TabKind::TODAY:
-      return knowToday && dated && task.dueDays == today;
-    case TabKind::UPCOMING:
-      // Strictly after today, and dated: DUE_NONE is the maximum, so an undated
-      // task would otherwise read as the furthest-future one there is.
-      return knowToday && dated && task.dueDays > today;
-    case TabKind::NO_DATE:
-      // No date needs no date: this is the one tab that means something before a
-      // sync has worked out what today is.
-      return !dated;
-  }
-  return false;
-}
-
-int TasksActivity::countFor(const TabKind kind) const {
-  const auto& tasks = TODOIST_TASKS.getTasks();
-  int count = 0;
-  for (size_t i = 0; i < tasks.size(); i++) {
-    if (matchesKind(kind, i)) count++;
-  }
-  return count;
-}
-
 int TasksActivity::rowCount() const { return countFor(currentKind()); }
 
-int TasksActivity::cacheIndexForRow(const int row) const {
-  if (row < 0) return -1;
-  const auto& tasks = TODOIST_TASKS.getTasks();
-  const TabKind kind = currentKind();
-  int seen = 0;
-  for (size_t i = 0; i < tasks.size(); i++) {
-    if (!matchesKind(kind, i)) continue;
-    if (seen == row) return static_cast<int>(i);
-    seen++;
-  }
-  return -1;
-}
-
 void TasksActivity::drawRow(const RowLayout& layout) const {
+  if (currentKind() == TabKind::LOGS) {
+    const int entryIndex = logEntryIndexForRow(layout.index);
+    if (entryIndex < 0) return;
+    const auto& entry = TODOIST_TASKS.getCompletedTodayEntries()[static_cast<size_t>(entryIndex)];
+    const auto shown = renderer.truncatedText(layout.titleFont, entry.title.c_str(), layout.width);
+    renderer.drawText(layout.titleFont, layout.x, layout.textY, shown.c_str(), layout.ink);
+    // Cached/Synced, the same dimmed second-line style the due date uses
+    // below -- absorbed from the old standalone Logs screen's row model.
+    const int tagY = layout.textY + renderer.getLineHeight(layout.titleFont);
+    const char* tag = entry.pending ? tr(STR_LOG_CACHED) : tr(STR_LOG_SYNCED);
+    renderer.drawText(layout.subtitleFont, layout.x, tagY, tag, layout.ink);
+    dimText(layout.x, tagY, layout.subtitleFont, tag, layout.ink);
+    return;
+  }
+
   const int cacheIndex = cacheIndexForRow(layout.index);
   if (cacheIndex < 0) return;
   const auto& task = TODOIST_TASKS.getTasks()[static_cast<size_t>(cacheIndex)];
@@ -228,6 +157,7 @@ void TasksActivity::formatStatus(char* out, const size_t outSize) const {
 }
 
 const char* TasksActivity::emptyMessage() const {
+  if (currentKind() == TabKind::LOGS) return tr(STR_LOG_EMPTY);
   if (!TODOIST_TASKS.hasSynced()) return tr(STR_TODOIST_NEVER_SYNCED);
   // Reached on All, since every other tab is hidden when it has no rows. An empty
   // All after a successful sync means the filter matched nothing, which is a
@@ -239,14 +169,51 @@ const char* TasksActivity::syncingMessage() const { return tr(STR_TODOIST_SYNCIN
 
 // -- completion -------------------------------------------------------------
 
-bool TasksActivity::rowsHaveSubtitle() const {
-  const TabKind kind = currentKind();
-  return kind != TabKind::TODAY && kind != TabKind::NO_DATE;
+bool TasksActivity::rowsHaveSubtitle() const { return taskTabModel::rowsHaveSubtitle(currentKind()); }
+
+const char* TasksActivity::rowConfirmLabel() const {
+  if (currentKind() == TabKind::LOGS) {
+    const int entryIndex = logEntryIndexForRow(selectedRow());
+    if (entryIndex < 0) return "";
+    return TODOIST_TASKS.getCompletedTodayEntries()[static_cast<size_t>(entryIndex)].pending ? tr(STR_CLEAR_BUTTON)
+                                                                                             : "";
+  }
+  return tr(STR_SELECT);
 }
 
-const char* TasksActivity::rowConfirmLabel() const { return tr(STR_SELECT); }
+void TasksActivity::onRowConfirm() {
+  if (currentKind() == TabKind::LOGS) {
+    clearSelectedLogRow();
+    return;
+  }
+  showRowOptions();
+}
 
-void TasksActivity::onRowConfirm() { showRowOptions(); }
+void TasksActivity::clearSelectedLogRow() {
+  const int entryIndex = logEntryIndexForRow(selectedRow());
+  if (entryIndex < 0) return;
+  const auto& entries = TODOIST_TASKS.getCompletedTodayEntries();
+  if (static_cast<size_t>(entryIndex) >= entries.size() || !entries[static_cast<size_t>(entryIndex)].pending) {
+    return;  // Synced -- nothing local left to undo.
+  }
+
+  {
+    // Same reasoning as performTaskCompletion(): the render task reads the
+    // list, and clearing a logged completion is as much a change to it as
+    // completing one is.
+    RenderLock lock(*this);
+    TODOIST_TASKS.cancelCompletedLogEntry(static_cast<size_t>(entryIndex));
+    TODOIST_TASKS.saveToFile();
+    // Same reasoning as every other mutator of today's counts: the
+    // companion's mood ladder needs to catch up immediately rather than
+    // waiting for the next sync or Home visit.
+    COMPANION.recordActivity();
+    const int remaining = rowCount();
+    if (selectedRow() >= remaining) selectedIndex = remaining;
+    if (selectedIndex < 1) selectedIndex = remaining > 0 ? 1 : 0;
+  }
+  requestUpdate(true);
+}
 
 void TasksActivity::showRowOptions() {
   const int cacheIndex = cacheIndexForRow(selectedRow());

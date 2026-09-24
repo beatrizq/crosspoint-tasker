@@ -37,7 +37,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/BleNotifyRelay.h"
-#include "util/HomeAppOrder.h"
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM,
@@ -153,6 +152,7 @@ void SettingsActivity::onEnter() {
   // Reset selection to first category
   selectedCategoryIndex = 0;
   selectedSettingIndex = 0;
+  headerFocused = false;
   preserveQuickResumeTimeoutOn =
       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
   quickResumeTimeoutAutoEnabled = false;
@@ -185,6 +185,10 @@ void SettingsActivity::loop() {
 
   // Handle actions with early return
   if (mappedInput.wasPressed(MappedInputManager::Button::Right2)) {
+    if (headerFocused) {
+      activityManager.goToSyncAll([] { activityManager.goToSettings(); });
+      return;
+    }
     if (selectedSettingIndex == 0) {
       selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
       hasChangedCategory = true;
@@ -197,40 +201,27 @@ void SettingsActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Right1)) {
-    // Always leaves, regardless of cursor depth: labelled Apps (see
-    // HomeActivity), so it reads as "go to the Apps screen", not "back up one
-    // level first" -- a setting row deep in a category used to need two
-    // presses to leave, one to surface the cursor to the category tab bar and
-    // a second to actually leave, which no longer matches what the button
-    // says it does.
+    // Two-level Back, the same as the organizer screens: from a setting row
+    // it first surfaces the cursor to the category tab bar (labelled Back, see
+    // render()); only from the tab bar or the header does it leave (labelled
+    // Home).
+    if (!headerFocused && selectedSettingIndex > 0) {
+      selectedSettingIndex = 0;
+      requestUpdate();
+      return;
+    }
     SETTINGS.saveToFile();
     onGoHome();
     return;
   }
 
-  // Side Up/Down: jump to the previous/next app in the home grid's own
-  // order, from wherever the cursor already is -- the same shortcut every
-  // app screen has (see OrganizerScreenActivity/QuickPickActivity's own
-  // identical block). Category-switching is still reachable the slower way:
-  // move the selection up to the tab bar and press Confirm to cycle it.
-  // Independent of the front buttons' own Up/Down (row paging) below. A
-  // fresh press each, same guard reasoning as Back/Confirm above.
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) upPressSeen = true;
-  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) downPressSeen = true;
-  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
-    if (upPressSeen) {
-      activityManager.goToApp(homeAppOrder::adjacentVisibleApp(homeAppOrder::AppId::Settings, /*forward=*/false));
-    }
-    upPressSeen = false;
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    if (downPressSeen) {
-      activityManager.goToApp(homeAppOrder::adjacentVisibleApp(homeAppOrder::AppId::Settings, /*forward=*/true));
-    }
-    downPressSeen = false;
-    return;
-  }
+  // Settings is no longer one of the apps on the home grid's own cycle (see
+  // HomeActivity::buildEntries()), so the side Up/Down "jump to the adjacent
+  // app" shortcut every grid-tile screen has no longer has a coherent
+  // meaning here -- there is no "adjacent app" to a screen that isn't part
+  // of that cycle any more. Side Up/Down falls through to ordinary row
+  // navigation below instead (NavNext/NavPrevious already blends them in
+  // with front Left1/Left2).
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   int tx = 0;
@@ -316,6 +307,10 @@ void SettingsActivity::loop() {
   const int settingsPageItems = GUI.getListPageItems(settingsListHeight, false);
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
+    // A swipe is a page-jump, not a single step, so it always leaves the
+    // header stop (if it was focused) -- same reasoning as
+    // OrganizerScreenActivity's own swipe handling.
+    headerFocused = false;
     selectedSettingIndex = selectedSettingIndex == 0 ? 1
                                                      : ButtonNavigator::nextPageIndex(
                                                            selectedSettingIndex, settingsCount + 1, settingsPageItems);
@@ -323,6 +318,7 @@ void SettingsActivity::loop() {
     return;
   }
   if (swipe == MappedInputManager::SwipeDir::Down) {
+    headerFocused = false;
     selectedSettingIndex =
         ButtonNavigator::previousPageIndex(selectedSettingIndex, settingsCount + 1, settingsPageItems);
     requestUpdate();
@@ -330,12 +326,26 @@ void SettingsActivity::loop() {
   }
 
   buttonNavigator.onNextRelease([this] {
-    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+    if (headerFocused) {
+      headerFocused = false;
+      selectedSettingIndex = 0;
+    } else if (selectedSettingIndex == settingsCount) {
+      headerFocused = true;
+    } else {
+      selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+    }
     requestUpdate();
   });
 
   buttonNavigator.onPreviousRelease([this] {
-    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
+    if (headerFocused) {
+      headerFocused = false;
+      selectedSettingIndex = settingsCount;
+    } else if (selectedSettingIndex == 0) {
+      headerFocused = true;
+    } else {
+      selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
+    }
     requestUpdate();
   });
 
@@ -569,8 +579,14 @@ void SettingsActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
-                 CROSSPOINT_VERSION);
+  const Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  GUI.drawHeader(renderer, headerRect, tr(STR_SETTINGS_TITLE), CROSSPOINT_VERSION);
+  // Hovering the header (see headerFocused's own comment): a true pixel
+  // invert, the same technique QuickPickActivity's own header focus uses.
+  if (headerFocused) {
+    renderer.invertRect(headerRect.x, headerRect.y, headerRect.width,
+                        std::min(HEADER_FOCUS_HIGHLIGHT_HEIGHT, headerRect.height));
+  }
 
   std::vector<TabInfo> tabs;
   tabs.reserve(categoryCount);
@@ -578,7 +594,7 @@ void SettingsActivity::render(RenderLock&&) {
     tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
   }
   GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
-                 selectedSettingIndex == 0);
+                 selectedSettingIndex == 0 && !headerFocused);
 
   const auto& settings = *currentSettings;
   GUI.drawList(
@@ -586,7 +602,7 @@ void SettingsActivity::render(RenderLock&&) {
       Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
            pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
                          metrics.verticalSpacing * 2)},
-      settingsCount, selectedSettingIndex - 1,
+      settingsCount, headerFocused ? -1 : selectedSettingIndex - 1,
       [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
       [&settings](int i) {
         const auto& setting = settings[i];
@@ -638,15 +654,18 @@ void SettingsActivity::render(RenderLock&&) {
 
   // Draw help text
   const auto confirmLabel =
-      (selectedSettingIndex == 0)
+      headerFocused ? tr(STR_SYNC_ALL)
+      : (selectedSettingIndex == 0)
           ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
           : (selectedSettingIndex > 0 && (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP
                  ? tr(STR_SELECT)
                  : tr(STR_TOGGLE));
 
-  // Back always ends at onGoHome() (see this file's own Back handler) rather
-  // than returning to a caller, so the hint says Home, not Back.
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // Back on a setting row (it surfaces to the category tab bar), Home once
+  // already there or on the header -- see this file's own Right1 handler.
+  const bool rowFocused = !headerFocused && selectedSettingIndex > 0;
+  const auto labels =
+      mappedInput.mapLabels(rowFocused ? tr(STR_BACK) : tr(STR_HOME), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen

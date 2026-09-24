@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "HabitTabModel.h"
 #include "OrganizerScreenActivity.h"
 
 /**
@@ -27,11 +28,20 @@
  * Tabs are one per Habitify Area that has a habit in it, plus a leading All --
  * the same "built from what is actually there" shape TasksActivity's tabs
  * have, but keyed by an open-ended area id rather than a fixed enum: areas are
- * the user's own data, not a set this app defines. An area's habits do not
+ * the user's own data, not a set this app defines. The tab set and row
+ * rules live in HabitTabModel, shared with QuickPickActivity's embedded copy
+ * of this screen so the two never disagree. An area's habits do not
  * move between tabs by completing or logging them (unlike a task's due date),
  * so unlike TasksActivity, completion/logging never has to rebuild the tab
  * bar -- only loading the cache and finishing a sync do, since those are the
  * only two things that can change which areas exist.
+ *
+ * A trailing Logs tab (habitTabModel::LOGS_AREA_ID, a sentinel no real area id can collide
+ * with) always shows too: today's completed habits, each row tagged Cached
+ * (still a locally-logged completion, not yet pushed -- Right2/Select undoes
+ * it) or Synced (a sync already confirmed it, nothing local left to undo) --
+ * absorbed from the old standalone Logs screen, which combined this with
+ * Tasks' own completions; TasksActivity's own Logs tab is the task half.
  */
 class HabitsActivity final : public OrganizerScreenActivity {
  public:
@@ -55,36 +65,36 @@ class HabitsActivity final : public OrganizerScreenActivity {
   const char* syncingMessage() const override;
   void startSync() override;
 
+  // True only on the Logs tab (today's completed habits) -- the one tab
+  // whose rows carry a second, Cached/Synced line.
+  bool rowsHaveSubtitle() const override { return isLogsTab(tab()); }
   const char* rowConfirmLabel() const override;
   void onRowConfirm() override;
   void loadCaches() override;
   HomeMenuItem homeItem() const override { return HomeMenuItem::HABITS; }
 
  private:
+  bool isLogsTab(int index) const { return habitTabModel::isLogsAreaId(areaIdAt(index)); }
+
   // The area id at `index`, or "" (All) when out of range.
   const std::string& areaIdAt(int index) const;
   // The area id the active tab holds.
   const std::string& currentAreaId() const { return areaIdAt(tab()); }
 
-  // Whether cacheIndex's habit belongs to `areaId` -- "" (All) matches every
-  // habit; anything else matches only that area's own id.
-  bool matchesArea(const std::string& areaId, size_t cacheIndex) const;
-  // Habits in `areaId`, ignoring the hide-completed setting: whether a tab
-  // exists should not flicker as habits are completed under it, the same
-  // reason emptyMessage() below treats "everything hidden" as distinct from
-  // "genuinely nothing here".
-  int countForArea(const std::string& areaId) const;
+  // Right2/Confirm on a Cached Logs row: undoes today's local completion via
+  // HabitifyHabitCache::undoLocalCompletion(), the same action the old
+  // standalone Logs screen offered. No-op on a Synced row (nothing local
+  // left to undo) or when the current tab isn't Logs.
+  void clearSelectedLogRow();
 
   // Recomputes which area tabs have habits, keeping the active area selected
   // where it survives and falling back to All where it does not (e.g. an area
   // deleted in Habitify itself since the last sync).
   void rebuildTabs();
 
-  // The cache index behind a visible row, or -1. The "hide completed" setting
-  // and the active tab both make these differ from a straight scan, so it is
-  // over at most HABITIFY_MAX_HABITS.
+  // The cache index behind a visible row of the active tab, or -1 (see
+  // habitTabModel::cacheIndexForRow()).
   int cacheIndexForRow(int row) const;
-  bool isVisible(size_t cacheIndex) const;
 
   // See the constructor comment. Consumed and cleared in onEnter().
   std::string selectHabitId;
@@ -106,6 +116,4 @@ class HabitsActivity final : public OrganizerScreenActivity {
   // The Options menu's "Focus session" entry opens this: a duration picker,
   // then organizerActions::beginFocusSession() for the same habit.
   void offerFocusSession(int cacheIndex);
-  // Renders progress as "x/y", or as a bare count for a habit with no goal.
-  void formatProgress(const HabitifyHabit& habit, char* out, size_t outSize) const;
 };

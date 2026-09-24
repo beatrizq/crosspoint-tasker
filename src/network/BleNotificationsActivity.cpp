@@ -77,6 +77,7 @@ void BleNotificationsActivity::dismissAll() {
 void BleNotificationsActivity::onEnter() {
   Activity::onEnter();
   selectorIndex = 0;
+  headerFocused = false;
   // Seen it -- clears the Home badge. Saved right away so the clear survives
   // a WiFi-sync reboot the same way the entries themselves do.
   if (BLE_NOTIFICATIONS.getUnreadCount() > 0) {
@@ -136,10 +137,15 @@ void BleNotificationsActivity::loop() {
 
   // Long-press Confirm: Dismiss (clear the whole queue). Fires when the hold
   // times out while still held.
-  if (itemCount > 0 && mappedInput.isPressed(MappedInputManager::Button::Right2) &&
+  if (!headerFocused && itemCount > 0 && mappedInput.isPressed(MappedInputManager::Button::Right2) &&
       mappedInput.getHeldTime() >= LONG_PRESS_MS) {
     longPressFired = true;
     dismissAll();
+    return;
+  }
+
+  if (headerFocused && mappedInput.wasReleased(MappedInputManager::Button::Right2)) {
+    activityManager.goToSyncAll([] { activityManager.goToBleNotifications(); });
     return;
   }
 
@@ -166,22 +172,41 @@ void BleNotificationsActivity::loop() {
 
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
+    // A swipe is a page-jump, not a single step, so it always leaves the
+    // header stop (if it was focused) -- same reasoning as
+    // OrganizerScreenActivity's own swipe handling.
+    headerFocused = false;
     selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), itemCount, pageItems);
     requestUpdate();
     return;
   }
   if (swipe == MappedInputManager::SwipeDir::Down) {
+    headerFocused = false;
     selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), itemCount, pageItems);
     requestUpdate();
     return;
   }
 
   buttonNavigator.onNextRelease([this, itemCount] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), itemCount);
+    if (headerFocused) {
+      headerFocused = false;
+      selectorIndex = 0;
+    } else if (static_cast<int>(selectorIndex) == itemCount - 1) {
+      headerFocused = true;
+    } else {
+      selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), itemCount);
+    }
     requestUpdate();
   });
   buttonNavigator.onPreviousRelease([this, itemCount] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), itemCount);
+    if (headerFocused) {
+      headerFocused = false;
+      selectorIndex = itemCount > 0 ? static_cast<size_t>(itemCount - 1) : 0;
+    } else if (selectorIndex == 0) {
+      headerFocused = true;
+    } else {
+      selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), itemCount);
+    }
     requestUpdate();
   });
 }
@@ -197,8 +222,15 @@ void BleNotificationsActivity::render(RenderLock&&) {
   // sync info -- this screen isn't an OrganizerScreenActivity (see this
   // file's own header comment), so it sets the status directly rather than
   // through that base class's formatStatus() override point.
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_BLE_NOTIFICATIONS),
+  const Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  GUI.drawHeader(renderer, headerRect, tr(STR_BLE_NOTIFICATIONS),
                  BleNotifyRelay::isConnected() ? tr(STR_BLE_CONNECTED) : tr(STR_BLE_DISCONNECTED));
+  // Hovering the header (see headerFocused's own comment): a true pixel
+  // invert, the same technique QuickPickActivity's own header focus uses.
+  if (headerFocused) {
+    renderer.invertRect(headerRect.x, headerRect.y, headerRect.width,
+                        std::min(HEADER_FOCUS_HIGHLIGHT_HEIGHT, headerRect.height));
+  }
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
@@ -222,7 +254,7 @@ void BleNotificationsActivity::render(RenderLock&&) {
       const int index = pageStart + row;
       if (index >= itemCount) break;
       const int rowY = contentTop + row * rowHeight;
-      const bool selected = index == static_cast<int>(selectorIndex);
+      const bool selected = !headerFocused && index == static_cast<int>(selectorIndex);
       const bool ink = !selected;
 
       if (selected) {
@@ -273,7 +305,8 @@ void BleNotificationsActivity::render(RenderLock&&) {
   }
 
   const auto labels =
-      mappedInput.mapLabels(tr(STR_HOME), count > 0 ? tr(STR_SELECT) : "", tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+      mappedInput.mapLabels(tr(STR_HOME), headerFocused ? tr(STR_SYNC_ALL) : (count > 0 ? tr(STR_SELECT) : ""),
+                            tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

@@ -186,71 +186,87 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   renderer.setOrientation(orig_orientation);
 }
 
-void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
+void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn,
+                                    const bool topSelected, const bool bottomSelected) const {
   if (gpio.hasTouch()) {
     return;
   }
 
   const int screenWidth = renderer.getScreenWidth();
   constexpr int buttonWidth = BaseMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
-  constexpr int buttonHeight = 80;                                       // Height on screen (width when rotated)
+  constexpr int minButtonHeight = 80;   // Floor for a box -- a short label doesn't shrink it below this
+  constexpr int stackPadding = 8;       // Above and below the stacked letters, inside the border
+  constexpr int stackLineAdvance = 20;  // Letter-to-letter distance (the font's own line height is 23)
   constexpr int buttonMargin = 4;
 
+  // A box grows to fit its label's stacked letters (one per line, see
+  // GfxRenderer::drawTextStacked) rather than staying a fixed height, so the
+  // border always encloses the whole label. An empty label falls back to the
+  // floor, which keeps the X4 layout below where it was.
+  const auto boxHeightFor = [&](const char* label) {
+    return std::max(minButtonHeight,
+                    renderer.getTextStackedHeight(SMALL_FONT_ID, label, stackLineAdvance) + 2 * stackPadding);
+  };
+
+  // A selected label is drawn inverted -- white letters on a black fill of the
+  // same shape as its border -- so it reads as the current choice.
   if (gpio.deviceIsX3()) {
     // X3 layout: Up on left side, Down on right side, positioned higher
-    constexpr int x3ButtonY = 155;
+    // The physical buttons don't move: the original minButtonHeight-tall box
+    // started at y=155, so that's where its centre sat. A taller box grows
+    // symmetrically around that centre (not downward from y=155), so the
+    // label stays centred on the button.
+    constexpr int x3ButtonCenterY = 155 + minButtonHeight / 2;
 
     if (topBtn != nullptr && topBtn[0] != '\0') {
+      const int height = boxHeightFor(topBtn);
       const int leftX = buttonMargin;
-      renderer.drawRect(leftX, x3ButtonY, buttonWidth, buttonHeight);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, topBtn);
-      const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-      const int textX = leftX + (buttonWidth - textHeight) / 2;
-      const int textY = x3ButtonY + (buttonHeight + textWidth) / 2;
-      renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, topBtn);
+      const int top = x3ButtonCenterY - height / 2;
+      if (topSelected) renderer.fillRect(leftX, top, buttonWidth, height);
+      renderer.drawRect(leftX, top, buttonWidth, height);
+      renderer.drawTextStacked(SMALL_FONT_ID, leftX + buttonWidth / 2, x3ButtonCenterY, topBtn, stackLineAdvance,
+                               /*black=*/!topSelected);
     }
 
     if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
+      const int height = boxHeightFor(bottomBtn);
       const int rightX = screenWidth - buttonMargin - buttonWidth;
-      renderer.drawRect(rightX, x3ButtonY, buttonWidth, buttonHeight);
-      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, bottomBtn);
-      const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-      const int textX = rightX + (buttonWidth - textHeight) / 2;
-      const int textY = x3ButtonY + (buttonHeight + textWidth) / 2;
-      renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, bottomBtn);
+      const int top = x3ButtonCenterY - height / 2;
+      if (bottomSelected) renderer.fillRect(rightX, top, buttonWidth, height);
+      renderer.drawRect(rightX, top, buttonWidth, height);
+      renderer.drawTextStacked(SMALL_FONT_ID, rightX + buttonWidth / 2, x3ButtonCenterY, bottomBtn, stackLineAdvance,
+                               /*black=*/!bottomSelected);
     }
   } else {
     // X4 layout: Both buttons stacked on right side
     constexpr int topButtonY = 345;
-    const char* labels[] = {topBtn, bottomBtn};
     const int x = screenWidth - buttonMargin - buttonWidth;
+    const int topHeight = boxHeightFor(topBtn);
+    const int bottomHeight = boxHeightFor(bottomBtn);
+    // The two boxes adjoin (no gap), sharing one border line where the first
+    // one's own (variable) height ends.
+    const int bottomTop = topButtonY + topHeight;
 
     if (topBtn != nullptr && topBtn[0] != '\0') {
+      if (topSelected) renderer.fillRect(x, topButtonY, buttonWidth, topHeight);
       renderer.drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);
-      renderer.drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1);
-      renderer.drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1, topButtonY + buttonHeight - 1);
+      renderer.drawLine(x, topButtonY, x, topButtonY + topHeight - 1);
+      renderer.drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1, topButtonY + topHeight - 1);
+      renderer.drawTextStacked(SMALL_FONT_ID, x + buttonWidth / 2, topButtonY + topHeight / 2, topBtn, stackLineAdvance,
+                               /*black=*/!topSelected);
     }
 
     if ((topBtn != nullptr && topBtn[0] != '\0') || (bottomBtn != nullptr && bottomBtn[0] != '\0')) {
-      renderer.drawLine(x, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + buttonHeight);
+      renderer.drawLine(x, bottomTop, x + buttonWidth - 1, bottomTop);
     }
 
     if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-      renderer.drawLine(x, topButtonY + buttonHeight, x, topButtonY + 2 * buttonHeight - 1);
-      renderer.drawLine(x + buttonWidth - 1, topButtonY + buttonHeight, x + buttonWidth - 1,
-                        topButtonY + 2 * buttonHeight - 1);
-      renderer.drawLine(x, topButtonY + 2 * buttonHeight - 1, x + buttonWidth - 1, topButtonY + 2 * buttonHeight - 1);
-    }
-
-    for (int i = 0; i < 2; i++) {
-      if (labels[i] != nullptr && labels[i][0] != '\0') {
-        const int y = topButtonY + i * buttonHeight;
-        const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
-        const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
-        const int textX = x + (buttonWidth - textHeight) / 2;
-        const int textY = y + (buttonHeight + textWidth) / 2;
-        renderer.drawTextRotated90CW(SMALL_FONT_ID, textX, textY, labels[i]);
-      }
+      if (bottomSelected) renderer.fillRect(x, bottomTop, buttonWidth, bottomHeight);
+      renderer.drawLine(x, bottomTop, x, bottomTop + bottomHeight - 1);
+      renderer.drawLine(x + buttonWidth - 1, bottomTop, x + buttonWidth - 1, bottomTop + bottomHeight - 1);
+      renderer.drawLine(x, bottomTop + bottomHeight - 1, x + buttonWidth - 1, bottomTop + bottomHeight - 1);
+      renderer.drawTextStacked(SMALL_FONT_ID, x + buttonWidth / 2, bottomTop + bottomHeight / 2, bottomBtn,
+                               stackLineAdvance, /*black=*/!bottomSelected);
     }
   }
 }
@@ -363,23 +379,28 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
-                           const bool showRule) const {
+                           const bool showRule, const bool includeStatusRow) const {
   (void)showRule;  // This theme never draws a header rule to begin with.
-  // Hide last battery draw
-  constexpr int maxBatteryWidth = 80;
-  renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
-                    BaseMetrics::values.batteryHeight + 10, false);
+  int batteryX = rect.x + rect.width;
+  if (includeStatusRow) {
+    // Hide last battery draw
+    constexpr int maxBatteryWidth = 80;
+    renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
+                      BaseMetrics::values.batteryHeight + 10, false);
 
-  const bool showBatteryPercentage =
-      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  // Position icon at right edge, drawBatteryRight will place text to the left
-  const int batteryX = rect.x + rect.width - 12 - BaseMetrics::values.batteryWidth;
-  drawBatteryRight(renderer,
-                   Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
-                   showBatteryPercentage);
+    const bool showBatteryPercentage =
+        SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
+    // Position icon at right edge, drawBatteryRight will place text to the left
+    batteryX = rect.x + rect.width - 12 - BaseMetrics::values.batteryWidth;
+    drawBatteryRight(renderer,
+                     Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
+                     showBatteryPercentage);
+  }
 
   if (title) {
-    int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;
+    // No battery reserved when includeStatusRow is false -- the title gets
+    // the full width, just the usual side padding.
+    const int padding = includeStatusRow ? rect.width - batteryX + BaseMetrics::values.batteryWidth : 0;
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title,
                                                  rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
                                                  EpdFontFamily::BOLD);

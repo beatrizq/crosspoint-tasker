@@ -12,25 +12,18 @@
 #include <utility>
 #include <vector>
 
+#include "HabitTabModel.h"
 #include "MappedInputManager.h"
 #include "OrganizerLabels.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "activities/util/OptionsMenuActivity.h"
+#include "companion/CompanionTracker.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/HomeAppOrder.h"
 #include "util/OrganizerActions.h"
 #include "util/OrganizerSync.h"
 #include "util/TaskWatchdog.h"
-
-namespace {
-// Manual entry is capped well above anything worth tapping through by hand;
-// a habit that legitimately needs more than this in one sitting is not what
-// this screen is for.
-constexpr int MAX_HABIT_LOG_AMOUNT = 50;
-constexpr int HABIT_LOG_SMALL_STEP = 1;
-constexpr int HABIT_LOG_LARGE_STEP = 5;
-}  // namespace
 
 void HabitsActivity::loadCaches() {
   HABITIFY_HABITS.loadFromFile();
@@ -55,14 +48,14 @@ void HabitsActivity::onEnter() {
   }
   // Gone, or hidden by "hide completed" since the pick was made: leave
   // onEnter()'s default selection (row 0) rather than landing on nothing.
-  if (targetCacheIndex < 0 || !isVisible(static_cast<size_t>(targetCacheIndex))) return;
+  if (targetCacheIndex < 0 || !habitTabModel::isVisible(static_cast<size_t>(targetCacheIndex))) return;
 
   // All (always visibleAreaIds[0]) matches everything, so it is only used as
   // the fallback -- a more specific tab, when the habit's area still has one,
   // is where it actually belongs.
   int targetTab = 0;
   for (size_t t = 1; t < visibleAreaIds.size(); t++) {
-    if (matchesArea(visibleAreaIds[t], static_cast<size_t>(targetCacheIndex))) {
+    if (habitTabModel::matchesArea(visibleAreaIds[t], static_cast<size_t>(targetCacheIndex))) {
       targetTab = static_cast<int>(t);
       break;
     }
@@ -86,37 +79,15 @@ const std::string& HabitsActivity::areaIdAt(const int index) const {
   return visibleAreaIds[static_cast<size_t>(index)];
 }
 
-const char* HabitsActivity::tabLabel(const int index) const {
-  const std::string& areaId = areaIdAt(index);
-  if (areaId.empty()) return tr(STR_HABITS_TAB_ALL);
-  return HABITIFY_HABITS.getAreaName(areaId);
-}
+const char* HabitsActivity::tabLabel(const int index) const { return habitTabModel::tabLabel(areaIdAt(index)); }
 
 void HabitsActivity::rebuildTabs() {
   // The area selected now, so the same tab stays under the user across a
   // rebuild even though its index may move when a tab ahead of it appears or
   // goes (an area renamed or deleted in Habitify itself, say).
   const std::string wanted = currentAreaId();
-
-  visibleAreaIds.clear();
-  visibleAreaIds.reserve(HABITIFY_HABITS.getAreas().size() + 1);
-  // All always shows: it is every habit regardless of area, and the one tab a
-  // successful sync cannot leave empty. The rest earn their place by having a
-  // habit, same as TasksActivity's own date tabs.
-  visibleAreaIds.push_back("");
-  for (const auto& area : HABITIFY_HABITS.getAreas()) {
-    if (countForArea(area.id) > 0) visibleAreaIds.push_back(area.id);
-  }
-
-  int restored = 0;
-  for (size_t i = 0; i < visibleAreaIds.size(); i++) {
-    if (visibleAreaIds[i] == wanted) {
-      restored = static_cast<int>(i);
-      break;
-    }
-  }
   // Falls back to All when the selected area just emptied or was removed.
-  setTab(restored);
+  setTab(habitTabModel::rebuildVisibleAreas(wanted, visibleAreaIds));
 
   // The new tab's list can be shorter than the old one, so the row selection
   // has to be pulled back inside it. Index 0 is the tab bar, always valid.
@@ -127,73 +98,10 @@ void HabitsActivity::rebuildTabs() {
 
 // -- rows -------------------------------------------------------------------
 
-bool HabitsActivity::isVisible(const size_t cacheIndex) const {
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  if (cacheIndex >= habits.size()) return false;
-  // The setting turns the list into what is left to do rather than a checklist of
-  // what is done. A habit with no goal can never read as complete, so it stays.
-  if (HABITIFY_STORE.getHideCompleted() && habits[cacheIndex].isComplete()) return false;
-  return true;
-}
-
-bool HabitsActivity::matchesArea(const std::string& areaId, const size_t cacheIndex) const {
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  if (cacheIndex >= habits.size()) return false;
-  if (areaId.empty()) return true;  // All
-  return habits[cacheIndex].areaId == areaId;
-}
-
-int HabitsActivity::countForArea(const std::string& areaId) const {
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  int count = 0;
-  for (size_t i = 0; i < habits.size(); i++) {
-    if (matchesArea(areaId, i)) count++;
-  }
-  return count;
-}
-
-int HabitsActivity::rowCount() const {
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  const std::string& areaId = currentAreaId();
-  int count = 0;
-  for (size_t i = 0; i < habits.size(); i++) {
-    if (isVisible(i) && matchesArea(areaId, i)) count++;
-  }
-  return count;
-}
+int HabitsActivity::rowCount() const { return habitTabModel::rowCountFor(currentAreaId()); }
 
 int HabitsActivity::cacheIndexForRow(const int row) const {
-  if (row < 0) return -1;
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  const std::string& areaId = currentAreaId();
-  int seen = 0;
-  for (size_t i = 0; i < habits.size(); i++) {
-    if (!isVisible(i) || !matchesArea(areaId, i)) continue;
-    if (seen == row) return static_cast<int>(i);
-    seen++;
-  }
-  return -1;
-}
-
-void HabitsActivity::formatProgress(const HabitifyHabit& habit, char* out, const size_t outSize) const {
-  if (out == nullptr || outSize == 0) return;
-  // %g rather than %f: a count-based habit reads "1/3", not "1.000000/3.000000",
-  // and a distance habit still shows its fraction as "2.5/5".
-  if (!habit.hasTarget()) {
-    // No goal means no denominator to show; the accumulated figure is all there
-    // is to say about it.
-    snprintf(out, outSize, "%g", static_cast<double>(habit.shownCurrent()));
-    return;
-  }
-  // completedByStatus can go true (Complete tapped locally, or Habitify's own
-  // status already says done) before current/pending's own arithmetic has
-  // caught up to target -- show target/target rather than a fraction that
-  // would still read as short right next to the row's own bold "done"
-  // styling (see isComplete()). The underlying figures are untouched; this
-  // only affects what gets drawn.
-  const float shown =
-      habit.completedByStatus && habit.shownCurrent() < habit.target ? habit.target : habit.shownCurrent();
-  snprintf(out, outSize, "%g/%g", static_cast<double>(shown), static_cast<double>(habit.target));
+  return habitTabModel::cacheIndexForRow(currentAreaId(), row);
 }
 
 void HabitsActivity::drawRow(const RowLayout& layout) const {
@@ -201,8 +109,21 @@ void HabitsActivity::drawRow(const RowLayout& layout) const {
   if (cacheIndex < 0) return;
   const HabitifyHabit& habit = HABITIFY_HABITS.getHabits()[static_cast<size_t>(cacheIndex)];
 
+  if (isLogsTab(tab())) {
+    // Title + a dimmed Cached/Synced subtitle, the same two-line style
+    // TasksActivity's own Logs tab uses -- absorbed from the old standalone
+    // Logs screen's row model.
+    const auto shownName = renderer.truncatedText(layout.titleFont, habit.name.c_str(), layout.width);
+    renderer.drawText(layout.titleFont, layout.x, layout.textY, shownName.c_str(), layout.ink);
+    const int subY = layout.textY + renderer.getLineHeight(layout.titleFont);
+    const char* tag = habit.hasPending() ? tr(STR_LOG_CACHED) : tr(STR_LOG_SYNCED);
+    renderer.drawText(layout.subtitleFont, layout.x, subY, tag, layout.ink);
+    dimText(layout.x, subY, layout.subtitleFont, tag, layout.ink);
+    return;
+  }
+
   char progress[24];
-  formatProgress(habit, progress, sizeof(progress));
+  habitTabModel::formatProgress(habit, progress, sizeof(progress));
 
   // Same layout as a Budget category: the figure hard right, drawn whole because
   // it is the part being glanced at, and the name takes what is left. Two spaces
@@ -251,6 +172,7 @@ void HabitsActivity::formatStatus(char* out, const size_t outSize) const {
 }
 
 const char* HabitsActivity::emptyMessage() const {
+  if (isLogsTab(tab())) return tr(STR_LOG_EMPTY);
   if (!HABITIFY_HABITS.hasSynced()) return tr(STR_HABITIFY_NEVER_SYNCED);
   // Everything hidden is a different state from having no habits, and it is the
   // one the user can act on - by turning the setting off.
@@ -267,12 +189,46 @@ const char* HabitsActivity::syncingMessage() const { return tr(STR_HABITIFY_SYNC
 const char* HabitsActivity::rowConfirmLabel() const {
   const int cacheIndex = cacheIndexForRow(selectedRow());
   if (cacheIndex < 0) return "";
+  if (isLogsTab(tab())) {
+    const auto& habit = HABITIFY_HABITS.getHabits()[static_cast<size_t>(cacheIndex)];
+    return habit.hasPending() ? tr(STR_CLEAR_BUTTON) : "";
+  }
   // Complete needs no unit, so every habit has something to offer here now -
   // a goal-less one just skips straight to Options without a Log entry.
   return tr(STR_SELECT);
 }
 
-void HabitsActivity::onRowConfirm() { showRowOptions(); }
+void HabitsActivity::onRowConfirm() {
+  if (isLogsTab(tab())) {
+    clearSelectedLogRow();
+    return;
+  }
+  showRowOptions();
+}
+
+void HabitsActivity::clearSelectedLogRow() {
+  const int cacheIndex = cacheIndexForRow(selectedRow());
+  if (cacheIndex < 0 || static_cast<size_t>(cacheIndex) >= HABITIFY_HABITS.getHabits().size()) return;
+  const HabitifyHabit& habit = HABITIFY_HABITS.getHabits()[static_cast<size_t>(cacheIndex)];
+  if (!habit.hasPending()) return;  // Synced -- nothing local left to undo.
+  const std::string habitId = habit.id;
+
+  {
+    // Same reasoning as performIncrement(): the render task reads the habit
+    // list, and undoing a completion is as much a change to it as logging is.
+    RenderLock lock(*this);
+    HABITIFY_HABITS.undoLocalCompletion(habitId);
+    HABITIFY_HABITS.saveToFile();
+    // Same reasoning as every other mutator of today's counts: the
+    // companion's mood ladder needs to catch up immediately rather than
+    // waiting for the next sync or Home visit.
+    COMPANION.recordActivity();
+    const int remaining = rowCount();
+    if (selectedRow() >= remaining) selectedIndex = remaining;
+    if (selectedIndex < 1) selectedIndex = remaining > 0 ? 1 : 0;
+  }
+  requestUpdate(true);
+}
 
 void HabitsActivity::showRowOptions() {
   const int cacheIndex = cacheIndexForRow(selectedRow());
@@ -349,30 +305,31 @@ void HabitsActivity::completeSelectedHabit() {
   // move it further before that press. Select is the same button that syncs
   // from the tab bar one row up, so a misplaced press should not silently log
   // anything - it opens here on Back.
-  startActivityForResult(std::make_unique<IntervalSelectionActivity>(
-                             renderer, mappedInput, "HabitifyLogAmount", StrId::STR_NONE_OPT, 1, 1,
-                             MAX_HABIT_LOG_AMOUNT, HABIT_LOG_SMALL_STEP, HABIT_LOG_LARGE_STEP, StrId::STR_NONE_OPT,
-                             /*readerActivity=*/false, /*ignoreInitialConfirmRelease=*/true, StrId::STR_NONE_OPT,
-                             habit.name, habit.unitSymbol),
-                         [this, cacheIndex](const ActivityResult& result) {
-                           // Confirm may still be physically down (the picker answers on the
-                           // press, this screen on the release). Back is swallowed whenever the
-                           // result was cancelled at all, since dismissing the picker with Back
-                           // is release-triggered here - by then the button is no longer down,
-                           // but the release is still what this screen would see next.
-                           if (mappedInput.isPressed(MappedInputManager::Button::Right2)) {
-                             swallowConfirmRelease = true;
-                           }
-                           if (result.isCancelled || mappedInput.isPressed(MappedInputManager::Button::Right1)) {
-                             swallowBackRelease = true;
-                           }
-                           if (result.isCancelled) {
-                             LOG_DBG("HABITS", "Log cancelled");
-                             return;
-                           }
-                           const auto amount = std::get<IntervalResult>(result.data).value;
-                           performIncrement(cacheIndex, static_cast<float>(amount));
-                         });
+  startActivityForResult(
+      std::make_unique<IntervalSelectionActivity>(renderer, mappedInput, "HabitifyLogAmount", StrId::STR_NONE_OPT, 1, 1,
+                                                  habitTabModel::MAX_LOG_AMOUNT, habitTabModel::LOG_SMALL_STEP,
+                                                  habitTabModel::LOG_LARGE_STEP, StrId::STR_NONE_OPT,
+                                                  /*readerActivity=*/false, /*ignoreInitialConfirmRelease=*/true,
+                                                  StrId::STR_NONE_OPT, habit.name, habit.unitSymbol),
+      [this, cacheIndex](const ActivityResult& result) {
+        // Confirm may still be physically down (the picker answers on the
+        // press, this screen on the release). Back is swallowed whenever the
+        // result was cancelled at all, since dismissing the picker with Back
+        // is release-triggered here - by then the button is no longer down,
+        // but the release is still what this screen would see next.
+        if (mappedInput.isPressed(MappedInputManager::Button::Right2)) {
+          swallowConfirmRelease = true;
+        }
+        if (result.isCancelled || mappedInput.isPressed(MappedInputManager::Button::Right1)) {
+          swallowBackRelease = true;
+        }
+        if (result.isCancelled) {
+          LOG_DBG("HABITS", "Log cancelled");
+          return;
+        }
+        const auto amount = std::get<IntervalResult>(result.data).value;
+        performIncrement(cacheIndex, static_cast<float>(amount));
+      });
 }
 
 void HabitsActivity::performIncrement(const int cacheIndex, const float amount) {
