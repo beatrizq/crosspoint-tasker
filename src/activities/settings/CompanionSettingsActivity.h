@@ -9,7 +9,7 @@
 /**
  * Settings submenu for the organizing companion: its nickname, mood display,
  * and mood-ladder thresholds. Reached from the Organizer tab like the other
- * integrations (Todoist, Habitify, etc.), even though there is nothing to
+ * integrations (Todoist, Google Calendar), even though there is nothing to
  * sync here -- everything it controls is local, not an account to connect.
  *
  * There is no enable/disable toggle -- the companion's own screen is Home
@@ -20,9 +20,9 @@ class CompanionSettingsActivity final : public Activity {
   explicit CompanionSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("CompanionSettings", renderer, mappedInput) {}
 
-  // Nickname, Sleep start, Sleep end, Happy at, Satisfied at, Neglected
-  // after, Reset.
-  static constexpr int MENU_ITEMS = 7;
+  // Nickname, Sleep start, Sleep end, Amazed at, Happy at, Satisfied at,
+  // Neglected after, Reset.
+  static constexpr int MENU_ITEMS = 8;
 
   void onEnter() override;
   void onExit() override;
@@ -31,10 +31,11 @@ class CompanionSettingsActivity final : public Activity {
 
  private:
   void handleSelection();
-  // Opens the numeric picker for one of the three mood-ladder thresholds
+  // Opens the numeric picker for one of the mood-ladder thresholds
   // (selectedIndex identifies which). The picker's own min/max already
   // reflect the current value of the field it is paired with (happyPoints
-  // must stay above satisfiedPoints; both and neglectedDays must stay >= 1),
+  // must stay above satisfiedPoints and below amazedPoints; all and
+  // neglectedDays must stay >= 1),
   // so the result is saved as-is -- see CrossPointSettings.h's comment on
   // companionHappyPoints for why that pairing exists.
   void offerThresholdPicker(int selectedIndex);

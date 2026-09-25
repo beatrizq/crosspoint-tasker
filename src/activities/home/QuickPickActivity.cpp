@@ -3,11 +3,8 @@
 #include <CivilTime.h>
 #include <GCalEventCache.h>
 #include <GfxRenderer.h>
-#include <HabitifyHabitCache.h>
-#include <HabitifyStore.h>
 #include <I18n.h>
 #include <TodoistTaskCache.h>
-#include <YnabCategoryCache.h>
 #include <esp_random.h>
 
 #include <algorithm>
@@ -17,6 +14,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "activities/organizer/OrganizerLabels.h"
 #include "activities/organizer/RescheduleTaskActivity.h"
@@ -49,7 +47,7 @@ constexpr int BUBBLE_GAP = 4;
 constexpr int MARGIN = 24;
 // Between the sprite and the embedded Tasks section's own title below it.
 constexpr int LABEL_GAP = 20;
-// Floor on the bubble's text column, so a one-word habit name still leaves
+// Floor on the bubble's text column, so a one-word task name still leaves
 // room for the tail and rounded corners rather than shrinking to fit it
 // exactly.
 constexpr int MIN_BUBBLE_TEXT_WIDTH = 80;
@@ -62,7 +60,7 @@ constexpr int COMPANION_BUDGET_PERCENT = 55;
 // own comment -- rather than drawing a selection box around this gap).
 constexpr int SELECTION_BOX_PADDING = 10;
 
-// This screen's own rule at the top of the Tasks/Habits section, so it reads
+// This screen's own rule at the top of the Tasks section, so it reads
 // as visually separate from the companion above it. The same weight as the
 // line LyraTheme::drawTabBar() draws under the tab bar (a plain 1px line).
 // The tab bar starts directly under it, with no gap: a focused bar's grey
@@ -96,33 +94,6 @@ constexpr int GLANCE_ICON_GAP = 8;
 // acted on; long enough to absorb a reflexive double-press, short enough
 // that a deliberate press still feels immediate.
 constexpr unsigned long RIGHT1_ENTRY_GRACE_MS = 500;
-
-// Case-insensitive full-string match, for finding the YNAB category literally
-// named "Wants" among the user's own (freeform) category names -- the
-// existing isYnabInflowCategory() (YnabCategory.h) only checks a prefix,
-// which is right for its own job (matching every numbered "Inflow: ..."
-// category) but wrong for an exact name like this one.
-bool equalsIgnoreCase(const std::string& a, const std::string& b) {
-  if (a.size() != b.size()) return false;
-  for (size_t i = 0; i < a.size(); i++) {
-    if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i]))) {
-      return false;
-    }
-  }
-  return true;
-}
-
-// The HABITIFY_HABITS cache index for `habitId`, or the list size when it's
-// gone -- re-resolved at every step of a habit action for the same reason the
-// task actions do it: a popup sits on top for as long as the user takes to
-// answer, and a bare cache index could go stale in the meantime.
-size_t habitIndexForId(const std::string& habitId) {
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  for (size_t i = 0; i < habits.size(); i++) {
-    if (habits[i].id == habitId) return i;
-  }
-  return habits.size();
-}
 
 // Same dither-overlay technique as OrganizerScreenActivity::dimText() (and
 // BleNotificationsActivity's own local copy): this e-ink panel has no real
@@ -174,7 +145,7 @@ constexpr int HEADER_HIGHLIGHT_HEIGHT = HEADER_CONTENT_HEIGHT - 6;
 constexpr int SEPARATOR_HEIGHT = 2;
 
 // Same font selection as OrganizerScreenActivity's own titleFontId()/
-// subtitleFontId() (Tasks/Calendar/Budget/Habits) -- not inherited (this
+// subtitleFontId() (Tasks/Calendar) -- not inherited (this
 // class doesn't derive from that base), but kept in lockstep so the embedded
 // section reads exactly like the real Tasks screen it's a scaled-down
 // rendering of.
@@ -189,19 +160,18 @@ int taskRowSubtitleFontId() {
 
 void QuickPickActivity::onEnter() {
   Activity::onEnter();
-  // Re-reads the glance strip's own Calendar/Budget sources from disk, the
-  // same "hydrate on entry" OrganizerScreenActivity::onEnter() -> loadCaches()
-  // already does for Calendar/Budget (CalendarActivity/BudgetActivity's own
-  // loadCaches() overrides) -- QuickPickActivity extends Activity directly,
+  // Re-reads the glance strip's own Calendar source from disk, the same
+  // "hydrate on entry" OrganizerScreenActivity::onEnter() -> loadCaches()
+  // already does for Calendar (CalendarActivity's own loadCaches() override)
+  // -- QuickPickActivity extends Activity directly,
   // so it never gets that hook. Without this, Sync All's own reboot (see
   // SyncAllActivity::onExit(), which fires whenever WiFi was activated, i.e.
   // on every real sync) starts these fresh from their constructors, and this
   // screen would otherwise read them exactly as they were before that sync
   // (hasSynced() == false, if this is a first sync) until something else --
-  // Calendar/Budget's own onEnter() -- happened to load them first. A no-op
+  // Calendar's own onEnter() -- happened to load it first. A no-op
   // (returns false, changes nothing) when the file doesn't exist yet.
   GCAL_EVENTS.loadFromFile();
-  YNAB_CATEGORIES.loadFromFile();
   // One I2C read to resolve the calendar day, so currentMood() is cheap from
   // the render path -- same reasoning as HomeActivity::onEnter()'s own call.
   // Needed here specifically because this screen can be reached directly
@@ -212,11 +182,6 @@ void QuickPickActivity::onEnter() {
   lastCompanionMood = COMPANION.currentMood();
   idleVariant = static_cast<uint8_t>(esp_random() % companion::IDLE_BUBBLE_VARIANT_COUNT);
   taskSelectedRow = 0;
-  habitSelectedRow = 0;
-  // Always Tasks on entry, and Habits at its own first tab if it's
-  // switched to later.
-  section = Section::Tasks;
-  activeAreaId.clear();
   // rebuildEmbeddedTabs() rebuilds visibleTabs from scratch regardless of
   // its prior content -- only activeKind (the "wanted" kind to try to keep,
   // see TaskTabModel::rebuildVisibleTabs()) needs setting here, to always
@@ -244,14 +209,6 @@ void QuickPickActivity::rebuildEmbeddedTabs() {
   const int rows = taskTabModel::countFor(activeKind);
   if (taskSelectedRow >= rows) taskSelectedRow = std::max(0, rows - 1);
   if (taskSelectedRow < 0) taskSelectedRow = 0;
-
-  // The Habits section, the same way (HabitsActivity::rebuildTabs() clamps
-  // its own selection for the same reason).
-  const int restoredArea = habitTabModel::rebuildVisibleAreas(activeAreaId, visibleAreaIds);
-  activeAreaId = visibleAreaIds[static_cast<size_t>(restoredArea)];
-  const int habitRows = habitTabModel::rowCountFor(activeAreaId);
-  if (habitSelectedRow >= habitRows) habitSelectedRow = std::max(0, habitRows - 1);
-  if (habitSelectedRow < 0) habitSelectedRow = 0;
 }
 
 void QuickPickActivity::afterRowAction() {
@@ -454,50 +411,32 @@ void QuickPickActivity::offerFocusSessionForTask(const std::string& taskId) {
                            if (result.isCancelled) return;
                            const int idx = std::get<OptionPickResult>(result.data).index;
                            if (idx < 0 || idx >= organizerActions::FOCUS_SESSION_DURATIONS_COUNT) return;
-                           organizerActions::beginFocusSession(capturedText, taskId, /*isHabit=*/false,
+                           organizerActions::beginFocusSession(capturedText, taskId,
                                                                organizerActions::FOCUS_SESSION_DURATIONS_MINUTES[idx],
                                                                renderer, mappedInput);
                          });
 }
 
-int QuickPickActivity::embeddedRowCount() const {
-  return section == Section::Tasks ? taskTabModel::countFor(activeKind) : habitTabModel::rowCountFor(activeAreaId);
-}
+int QuickPickActivity::embeddedRowCount() const { return taskTabModel::countFor(activeKind); }
 
-bool QuickPickActivity::embeddedOnLogs() const {
-  return section == Section::Tasks ? activeKind == taskTabModel::TaskTabKind::LOGS
-                                   : habitTabModel::isLogsAreaId(activeAreaId);
-}
+bool QuickPickActivity::embeddedOnLogs() const { return activeKind == taskTabModel::TaskTabKind::LOGS; }
 
-void QuickPickActivity::switchSection(const Section next) {
-  if (next == section) return;
-  section = next;
-  // Lands on the new section's tab bar rather than wherever the other one's
-  // cursor happened to be -- always a valid, visible place to be (see
+void QuickPickActivity::switchFilter(const uint8_t filterIndex) {
+  const uint8_t clamped = filterIndex == 0 ? 0 : 1;
+  if (clamped == APP_STATE.todoistActiveFilter) return;
+  taskTabModel::setActiveFilter(clamped);
+  // The other filter has its own rows and its own set of non-empty tabs, so the
+  // tab set is rebuilt (keeping the same kind selected where the new filter has
+  // it), and the cursor lands on the tab bar rather than wherever the other
+  // filter's cursor happened to be -- always a valid, visible place to be (see
   // tabBarFocused's own comment).
+  taskSelectedRow = 0;
+  rebuildEmbeddedTabs();
   tabBarFocused = true;
   requestUpdate(true);
 }
 
 void QuickPickActivity::switchTab(const int delta) {
-  if (section == Section::Habits) {
-    const int areaCount = static_cast<int>(visibleAreaIds.size());
-    if (areaCount <= 1) return;
-    int index = 0;
-    for (int i = 0; i < areaCount; i++) {
-      if (visibleAreaIds[static_cast<size_t>(i)] == activeAreaId) {
-        index = i;
-        break;
-      }
-    }
-    index = ((index + delta) % areaCount + areaCount) % areaCount;
-    activeAreaId = visibleAreaIds[static_cast<size_t>(index)];
-    habitSelectedRow = 0;
-    if (habitTabModel::rowCountFor(activeAreaId) == 0) tabBarFocused = true;
-    requestUpdate();
-    return;
-  }
-
   const int tabCount = static_cast<int>(visibleTabs.size());
   if (tabCount <= 1) return;
 
@@ -516,131 +455,6 @@ void QuickPickActivity::switchTab(const int delta) {
   // which is always a valid place to be (see tabBarFocused's own comment).
   if (taskTabModel::countFor(activeKind) == 0) tabBarFocused = true;
   requestUpdate();
-}
-
-void QuickPickActivity::showHabitRowOptions(const size_t cacheIndex) {
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  if (cacheIndex >= habits.size()) return;
-  const std::string habitId = habits[cacheIndex].id;
-  // A habit with no goal has no unit, so nothing can be logged against it --
-  // Log is left off the menu rather than shown and silently failing. Complete
-  // needs no unit, so it is offered either way.
-  const bool canLog = !habits[cacheIndex].unitSymbol.empty();
-
-  std::vector<std::string> options;
-  options.reserve(3);
-  if (canLog) options.push_back(tr(STR_HABITIFY_LOG));
-  options.push_back(tr(STR_COMPLETE_HABIT));
-  options.push_back(tr(STR_FOCUS_SESSION));
-  const int logIdx = canLog ? 0 : -1;
-  const int completeIdx = canLog ? 1 : 0;
-  const int focusIdx = canLog ? 2 : 1;
-
-  startActivityForResult(
-      std::make_unique<OptionsMenuActivity>(renderer, mappedInput, StrId::STR_OPTIONS, std::move(options)),
-      [this, habitId, logIdx, completeIdx, focusIdx](const ActivityResult& result) {
-        if (mappedInput.isPressed(MappedInputManager::Button::Right2)) {
-          swallowConfirmRelease = true;
-        }
-        if (result.isCancelled || mappedInput.isPressed(MappedInputManager::Button::Right1)) {
-          swallowBackRelease = true;
-        }
-        if (result.isCancelled) return;
-        const int idx = std::get<OptionPickResult>(result.data).index;
-        if (idx == logIdx) {
-          logHabitRow(habitId);
-        } else if (idx == completeIdx) {
-          completeHabitRow(habitId);
-        } else if (idx == focusIdx) {
-          offerFocusSessionForHabit(habitId);
-        }
-      });
-}
-
-void QuickPickActivity::logHabitRow(const std::string& habitId) {
-  const size_t index = habitIndexForId(habitId);
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  if (index >= habits.size() || habits[index].unitSymbol.empty()) return;
-  const HabitifyHabit& habit = habits[index];
-
-  // A number entry rather than a single +1, defaulting to 1 so one Confirm
-  // press behaves like a plain "+1" -- same as HabitsActivity's own log entry.
-  startActivityForResult(
-      std::make_unique<IntervalSelectionActivity>(renderer, mappedInput, "HabitifyLogAmount", StrId::STR_NONE_OPT, 1, 1,
-                                                  habitTabModel::MAX_LOG_AMOUNT, habitTabModel::LOG_SMALL_STEP,
-                                                  habitTabModel::LOG_LARGE_STEP, StrId::STR_NONE_OPT,
-                                                  /*readerActivity=*/false, /*ignoreInitialConfirmRelease=*/true,
-                                                  StrId::STR_NONE_OPT, habit.name, habit.unitSymbol),
-      [this, habitId](const ActivityResult& result) {
-        if (mappedInput.isPressed(MappedInputManager::Button::Right2)) {
-          swallowConfirmRelease = true;
-        }
-        if (result.isCancelled || mappedInput.isPressed(MappedInputManager::Button::Right1)) {
-          swallowBackRelease = true;
-        }
-        if (result.isCancelled) return;
-        const auto amount = std::get<IntervalResult>(result.data).value;
-        const size_t idx = habitIndexForId(habitId);
-        if (idx < HABITIFY_HABITS.getHabits().size() && amount > 0) {
-          RenderLock lock(*this);
-          organizerActions::logHabit(idx, static_cast<float>(amount));
-        }
-        afterRowAction();
-      });
-}
-
-void QuickPickActivity::completeHabitRow(const std::string& habitId) {
-  const size_t idx = habitIndexForId(habitId);
-  if (idx < HABITIFY_HABITS.getHabits().size()) {
-    RenderLock lock(*this);
-    organizerActions::completeHabit(idx);
-  }
-  afterRowAction();
-}
-
-void QuickPickActivity::offerFocusSessionForHabit(const std::string& habitId) {
-  const size_t index = habitIndexForId(habitId);
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  if (index >= habits.size()) return;  // gone already
-  const std::string capturedText = habits[index].name;
-
-  startActivityForResult(std::make_unique<OptionsMenuActivity>(renderer, mappedInput, StrId::STR_FOCUS_SESSION,
-                                                               organizerActions::focusSessionDurationOptions()),
-                         [this, capturedText, habitId](const ActivityResult& result) {
-                           if (mappedInput.isPressed(MappedInputManager::Button::Right2)) {
-                             swallowConfirmRelease = true;
-                           }
-                           if (result.isCancelled || mappedInput.isPressed(MappedInputManager::Button::Right1)) {
-                             swallowBackRelease = true;
-                           }
-                           if (result.isCancelled) return;
-                           const int idx = std::get<OptionPickResult>(result.data).index;
-                           if (idx < 0 || idx >= organizerActions::FOCUS_SESSION_DURATIONS_COUNT) return;
-                           organizerActions::beginFocusSession(capturedText, habitId, /*isHabit=*/true,
-                                                               organizerActions::FOCUS_SESSION_DURATIONS_MINUTES[idx],
-                                                               renderer, mappedInput);
-                         });
-}
-
-void QuickPickActivity::clearSelectedHabitLogRow() {
-  if (!habitTabModel::isLogsAreaId(activeAreaId)) return;
-  const int cacheIndex = habitTabModel::logEntryIndexForRow(habitSelectedRow);
-  if (cacheIndex < 0) return;
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  if (static_cast<size_t>(cacheIndex) >= habits.size() || !habits[static_cast<size_t>(cacheIndex)].hasPending()) {
-    return;  // Synced -- nothing local left to undo.
-  }
-  const std::string habitId = habits[static_cast<size_t>(cacheIndex)].id;
-
-  {
-    RenderLock lock(*this);
-    HABITIFY_HABITS.undoLocalCompletion(habitId);
-    HABITIFY_HABITS.saveToFile();
-    // The companion's mood ladder needs to catch up immediately rather than
-    // waiting for the next sync or Home visit -- same as HabitsActivity.
-    COMPANION.recordActivity();
-  }
-  afterRowAction();
 }
 
 void QuickPickActivity::clearSelectedLogTaskRow() {
@@ -686,20 +500,20 @@ void QuickPickActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Right1)) swallowBackRelease = false;
   if (mappedInput.wasPressed(MappedInputManager::Button::Right2)) swallowConfirmRelease = false;
 
-  // Side Up/Down (labelled Tasks/Habits, see render()): which of the two
-  // sections shows below the companion, from whichever focus stop the cursor
-  // is on, instead of the app-jump shortcut every other screen's side
-  // buttons have (see this file's own header comment). A fresh press each,
+  // Side Up/Down (labelled F1/F2, see render()): which of the two Todoist
+  // filters the section below the companion shows, from whichever focus stop
+  // the cursor is on, instead of the app-jump shortcut every other screen's
+  // side buttons have (see this file's own header comment). A fresh press each,
   // same guard reasoning as Right1/Right2 above.
   if (mappedInput.wasPressed(MappedInputManager::Button::Up)) upPressSeen = true;
   if (mappedInput.wasPressed(MappedInputManager::Button::Down)) downPressSeen = true;
   if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
-    if (upPressSeen) switchSection(Section::Tasks);
+    if (upPressSeen) switchFilter(0);
     upPressSeen = false;
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    if (downPressSeen) switchSection(Section::Habits);
+    if (downPressSeen) switchFilter(1);
     downPressSeen = false;
     return;
   }
@@ -736,7 +550,7 @@ void QuickPickActivity::loop() {
         if (!tabBarFocused) {
           // Back: from a row, up to the tab bar of the section it belongs to
           // (labelled Back, see render()) -- the same two-level Back the real
-          // Tasks/Habits/Calendar/Budget/Settings screens have.
+          // Tasks/Calendar/Settings screens have.
           tabBarFocused = true;
           requestUpdate();
           break;
@@ -879,14 +693,7 @@ void QuickPickActivity::loop() {
           switchTab(1);
           break;
         }
-        if (section == Section::Habits) {
-          if (habitTabModel::isLogsAreaId(activeAreaId)) {
-            clearSelectedHabitLogRow();
-          } else {
-            const int cacheIndex = habitTabModel::cacheIndexForRow(activeAreaId, habitSelectedRow);
-            if (cacheIndex >= 0) showHabitRowOptions(static_cast<size_t>(cacheIndex));
-          }
-        } else if (activeKind == taskTabModel::TaskTabKind::LOGS) {
+        if (activeKind == taskTabModel::TaskTabKind::LOGS) {
           clearSelectedLogTaskRow();
         } else {
           const int cacheIndex = taskTabModel::taskCacheIndexForRow(activeKind, taskSelectedRow);
@@ -918,7 +725,10 @@ void QuickPickActivity::renderTasksTab(const int top, const int height) const {
   // same rows the real Tasks screen draws, following SETTINGS.organizerFontSize.
   const int titleFont = taskRowTitleFontId();
   const int subtitleFont = taskRowSubtitleFontId();
-  const bool hasSubtitle = taskTabModel::rowsHaveSubtitle(activeKind);
+  // A subtitle line where the tab shows due dates (Upcoming) or Logs' tag, or
+  // wherever any row carries a label -- every row then keeps that line, empty
+  // or not, so the list stays even.
+  const bool hasSubtitle = taskTabModel::rowsHaveSubtitle(activeKind) || taskTabModel::anyRowHasLabel(activeKind);
   const int rowPad = std::max(6, renderer.getLineHeight(titleFont) * 2 / 5);
   const int rowHeight = hasSubtitle ? renderer.getLineHeight(titleFont) + renderer.getLineHeight(subtitleFont) + rowPad
                                     : renderer.getLineHeight(titleFont) + rowPad;
@@ -951,104 +761,29 @@ void QuickPickActivity::renderTasksTab(const int top, const int height) const {
       const auto& task = TODOIST_TASKS.getTasks()[static_cast<size_t>(cacheIndex)];
       const auto shown = renderer.truncatedText(titleFont, task.content.c_str(), textWidth);
       renderer.drawText(titleFont, textX, textY, shown.c_str(), ink);
-      // Undated tasks draw nothing rather than "--": the row keeps its
-      // height, so the list stays even, and an empty line says "no date"
-      // more quietly than a dash -- same reasoning TasksActivity's own
-      // drawRow() uses.
-      if (hasSubtitle && task.dueDays != todoist::DUE_NONE) {
-        char when[16];
-        organizer::formatDayLabel(task.dueDays, when, sizeof(when));
-        const auto shownWhen = renderer.truncatedText(subtitleFont, when, textWidth);
-        const int whenY = textY + renderer.getLineHeight(titleFont);
-        renderer.drawText(subtitleFont, textX, whenY, shownWhen.c_str(), ink);
-        dimText(renderer, textX, whenY, subtitleFont, shownWhen.c_str(), ink);
-      }
-    }
-
-    const bool lastOnPage = row + 1 >= pageItems || i + 1 >= totalRows;
-    if (!selected && !lastOnPage) {
-      renderer.fillRectDither(textX, rowY + rowHeight - SEPARATOR_HEIGHT, textWidth, SEPARATOR_HEIGHT,
-                              Color::LightGray);
-    }
-  }
-}
-
-void QuickPickActivity::renderHabitsTab(const int top, const int height) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int pageWidth = renderer.getScreenWidth();
-  const int textX = metrics.contentSidePadding;
-  const int textWidth = pageWidth - metrics.contentSidePadding * 2;
-  const bool rowsFocused = focus == Focus::Embedded && !tabBarFocused;
-  const bool onLogs = habitTabModel::isLogsAreaId(activeAreaId);
-
-  const int totalRows = habitTabModel::rowCountFor(activeAreaId);
-  if (totalRows == 0) {
-    // Same distinctions HabitsActivity::emptyMessage() draws: everything
-    // hidden by "hide completed" is a different state from having no habits,
-    // and the one the user can act on.
-    const char* empty;
-    if (onLogs) {
-      empty = tr(STR_LOG_EMPTY);
-    } else if (!HABITIFY_HABITS.hasSynced()) {
-      empty = tr(STR_HABITIFY_NEVER_SYNCED);
-    } else if (HABITIFY_STORE.getHideCompleted() && !HABITIFY_HABITS.getHabits().empty()) {
-      empty = tr(STR_HABITIFY_ALL_DONE);
-    } else {
-      empty = tr(STR_HABITIFY_NO_HABITS);
-    }
-    renderer.drawCenteredText(UI_10_FONT_ID, top + height / 2, empty);
-    return;
-  }
-
-  // One line per habit -- the name with its progress hard right -- except on
-  // Logs, which carries a second Cached/Synced line, same as the real screen.
-  const int titleFont = taskRowTitleFontId();
-  const int subtitleFont = taskRowSubtitleFontId();
-  const int rowPad = std::max(6, renderer.getLineHeight(titleFont) * 2 / 5);
-  const int rowHeight = onLogs ? renderer.getLineHeight(titleFont) + renderer.getLineHeight(subtitleFont) + rowPad
-                               : renderer.getLineHeight(titleFont) + rowPad;
-  const int pageItems = std::max(1, height / rowHeight);
-  const int pageStart = (habitSelectedRow / pageItems) * pageItems;
-
-  for (int row = 0; row < pageItems; row++) {
-    const int i = pageStart + row;
-    if (i >= totalRows) break;
-    const int rowY = top + row * rowHeight;
-    const bool selected = rowsFocused && i == habitSelectedRow;
-    const bool ink = !selected;
-
-    if (selected) renderer.fillRect(0, rowY, pageWidth, rowHeight);
-
-    const int textY = rowY + rowPad / 2;
-    const int cacheIndex = habitTabModel::cacheIndexForRow(activeAreaId, i);
-    if (cacheIndex < 0) continue;
-    const HabitifyHabit& habit = HABITIFY_HABITS.getHabits()[static_cast<size_t>(cacheIndex)];
-
-    if (onLogs) {
-      const auto shownName = renderer.truncatedText(titleFont, habit.name.c_str(), textWidth);
-      renderer.drawText(titleFont, textX, textY, shownName.c_str(), ink);
-      const int subY = textY + renderer.getLineHeight(titleFont);
-      const char* tag = habit.hasPending() ? tr(STR_LOG_CACHED) : tr(STR_LOG_SYNCED);
-      renderer.drawText(subtitleFont, textX, subY, tag, ink);
-      dimText(renderer, textX, subY, subtitleFont, tag, ink);
-    } else {
-      char progress[24];
-      habitTabModel::formatProgress(habit, progress, sizeof(progress));
-
-      // The figure hard right, drawn whole because it is the part being
-      // glanced at, and the name takes what is left -- two spaces of the row's
-      // own font between them, same as HabitsActivity::drawRow().
-      const int gap = renderer.getSpaceWidth(titleFont) * 2;
-      const int progressWidth = renderer.getTextWidth(titleFont, progress, EpdFontFamily::REGULAR);
-      const int nameWidth = std::max(0, textWidth - progressWidth - gap);
-      const auto shownName = renderer.truncatedText(titleFont, habit.name.c_str(), nameWidth, EpdFontFamily::REGULAR);
-      renderer.drawText(titleFont, textX, textY, shownName.c_str(), ink, EpdFontFamily::REGULAR);
-      renderer.drawText(titleFont, textX + textWidth - progressWidth, textY, progress, ink, EpdFontFamily::REGULAR);
-
-      // A met goal is greyed, so a finished habit reads at a glance.
-      if (habit.isComplete()) {
-        dimText(renderer, textX, textY, titleFont, shownName.c_str(), ink);
-        dimText(renderer, textX + textWidth - progressWidth, textY, titleFont, progress, ink);
+      // The due date (only on tabs that show it) and the label, joined with a
+      // middle dot when both are there. Undated, unlabelled tasks draw nothing
+      // rather than "--": the row keeps its height, so the list stays even, and
+      // an empty line says "nothing to add" more quietly than a dash -- same
+      // reasoning TasksActivity's own drawRow() uses.
+      if (hasSubtitle) {
+        const bool showDate = taskTabModel::rowsHaveSubtitle(activeKind) && task.dueDays != todoist::DUE_NONE;
+        char when[16] = "";
+        if (showDate) organizer::formatDayLabel(task.dueDays, when, sizeof(when));
+        char subtitle[TodoistTask::LABELS_MAX_LEN + 32];
+        if (showDate && !task.labels.empty()) {
+          snprintf(subtitle, sizeof(subtitle), "%s  \xC2\xB7  %s", when, task.labels.c_str());
+        } else if (showDate) {
+          snprintf(subtitle, sizeof(subtitle), "%s", when);
+        } else {
+          snprintf(subtitle, sizeof(subtitle), "%s", task.labels.c_str());
+        }
+        if (subtitle[0] != '\0') {
+          const auto shownSubtitle = renderer.truncatedText(subtitleFont, subtitle, textWidth);
+          const int subtitleY = textY + renderer.getLineHeight(titleFont);
+          renderer.drawText(subtitleFont, textX, subtitleY, shownSubtitle.c_str(), ink);
+          dimText(renderer, textX, subtitleY, subtitleFont, shownSubtitle.c_str(), ink);
+        }
       }
     }
 
@@ -1092,20 +827,6 @@ std::vector<QuickPickActivity::GlanceEventRow> QuickPickActivity::todaysEvents()
   // in that case (see render()'s own glanceTextHeight/glanceStripHeight),
   // rather than spending space on a "nothing today" line.
   return rows;
-}
-
-std::string QuickPickActivity::glanceBudgetWants() const {
-  // No text label here -- the budget icon next to this line is the label
-  // (see render()'s own glance-strip drawing).
-  if (!YNAB_CATEGORIES.hasSynced()) {
-    return std::string(tr(STR_YNAB_NEVER_SYNCED));
-  }
-  for (const auto& category : YNAB_CATEGORIES.getCategories()) {
-    if (equalsIgnoreCase(category.name, "Wants")) {
-      return category.balance;
-    }
-  }
-  return std::string(tr(STR_COMPANION_GLANCE_NO_WANTS));
 }
 
 std::string QuickPickActivity::glanceNewestAlert() const {
@@ -1182,9 +903,8 @@ void QuickPickActivity::render(RenderLock&&) {
   // Left1/Left2 loop below nor sits inside either focus highlight), but
   // contentTop (defined after it) is what the companion figure/bubble and
   // its own focus box are actually positioned from. Today's Calendar events
-  // only for now -- glanceBudgetWants()/glanceNewestAlert() are temporarily
-  // not called here (still defined, for whenever this strip grows back to
-  // include them). One bulleted line per event (a plain dot, not that app's
+  // only -- glanceNewestAlert() is not called here (still defined, but the
+  // bubble owns alerts now). One bulleted line per event (a plain dot, not that app's
   // own icon: unlike the single-line rows this replaced, there can be more
   // than one), so the row count -- and this strip's own height -- is
   // whatever todaysEvents() actually returns, not a fixed GLANCE_ROW_COUNT.
@@ -1259,7 +979,7 @@ void QuickPickActivity::render(RenderLock&&) {
   // A sleeping companion doesn't also show an alert, so that line still wins
   // outright; otherwise the bubble shows the newest BLE alert not yet
   // dismissed from here (see CompanionAlertBubble's own comment), or a
-  // mood-flavored idle line once there's none left. Never a task/habit
+  // mood-flavored idle line once there's none left. Never a task
   // suggestion -- see this file's own header comment.
   std::string text;
   if (mood == companion::Mood::Sleeping) {
@@ -1326,9 +1046,9 @@ void QuickPickActivity::render(RenderLock&&) {
   // Straight from the sprite to the embedded Tasks section below -- no mood
   // label in between any more (removed entirely, freeing this space for the
   // section to sit higher).
-  const char* const tasksLabel = tr(STR_COMPANION_SIDE_TASKS);
-  const char* const habitsLabel = tr(STR_COMPANION_SIDE_HABITS);
-  const int sideButtonsBottom = GUI.getSideButtonHintsBottom(renderer, tasksLabel, habitsLabel);
+  const char* const filter1Label = tr(STR_COMPANION_SIDE_FILTER_1);
+  const char* const filter2Label = tr(STR_COMPANION_SIDE_FILTER_2);
+  const int sideButtonsBottom = GUI.getSideButtonHintsBottom(renderer, filter1Label, filter2Label);
   const int sectionTopNatural = spriteTop + spriteH + LABEL_GAP;
   // 0 means there is no shared line to sit below (see getSideButtonHintsBottom()),
   // so the section just stays where the companion leaves room.
@@ -1336,15 +1056,14 @@ void QuickPickActivity::render(RenderLock&&) {
                              ? std::max(sectionTopNatural, sideButtonsBottom + SECTION_SIDE_BUTTON_GAP)
                              : sectionTopNatural;
 
-  // The section below is a scaled-down rendering of the real Tasks or Habits
-  // screen (see this file's own header comment) -- but without that screen's
+  // The section below is a scaled-down rendering of the real Tasks screen (see
+  // this file's own header comment) -- but without that screen's
   // own title, or the companion's Highscore that used to sit on the same row:
   // just a single rule marking where it starts, the same weight as the line
   // LyraTheme::drawTabBar draws under the tab bar. Drawn directly rather than
   // through GUI.drawHeader(), which only ever draws its rule alongside a
-  // title. Then the tab bar itself (visibleTabs/visibleAreaIds mirror the real
-  // screens' own tab bars exactly, via the shared TaskTabModel/HabitTabModel).
-  const bool habitsShowing = section == Section::Habits;
+  // title. Then the tab bar itself (visibleTabs mirrors the real screen's own
+  // tab bar exactly, via the shared TaskTabModel).
   renderer.drawLine(0, sectionTop, pageWidth - 1, sectionTop, SECTION_RULE_LINE_WIDTH, true);
   const int tabBarTop = sectionTop + SECTION_RULE_LINE_WIDTH;
 
@@ -1352,27 +1071,16 @@ void QuickPickActivity::render(RenderLock&&) {
   // "focused" (matches OrganizerScreenActivity's own "index 0 is the tab
   // bar" convention, the same one loop() mirrors for Left1/Left2/Right2).
   std::vector<TabInfo> tabs;
-  if (habitsShowing) {
-    tabs.reserve(visibleAreaIds.size());
-    for (const auto& areaId : visibleAreaIds) {
-      tabs.push_back(TabInfo{habitTabModel::tabLabel(areaId), areaId == activeAreaId});
-    }
-  } else {
-    tabs.reserve(visibleTabs.size());
-    for (const auto kind : visibleTabs) {
-      tabs.push_back(TabInfo{taskTabModel::tabLabel(kind), kind == activeKind});
-    }
+  tabs.reserve(visibleTabs.size());
+  for (const auto kind : visibleTabs) {
+    tabs.push_back(TabInfo{taskTabModel::tabLabel(kind), kind == activeKind});
   }
   GUI.drawTabBar(renderer, Rect{0, tabBarTop, pageWidth, metrics.tabBarHeight}, tabs,
                  focus == Focus::Embedded && tabBarFocused);
 
   const int listTop = tabBarTop + metrics.tabBarHeight;
   const int listHeight = std::max(0, contentBottom - listTop);
-  if (habitsShowing) {
-    renderHabitsTab(listTop, listHeight);
-  } else {
-    renderTasksTab(listTop, listHeight);
-  }
+  renderTasksTab(listTop, listHeight);
 
   // Right1 is a per-focus shortcut now (see this file's own header comment),
   // not a fixed "leave" action -- blank wherever there's nothing to open.
@@ -1405,18 +1113,7 @@ void QuickPickActivity::render(RenderLock&&) {
         if (!embeddedOnLogs() && embeddedRowCount() > 0) backLabel = tr(STR_RANDOM);
         // Same touch OrganizerScreenActivity's own tab bar gives Right2: its
         // label previews the tab a press would switch to.
-        if (section == Section::Habits) {
-          if (visibleAreaIds.size() > 1) {
-            size_t index = 0;
-            for (size_t i = 0; i < visibleAreaIds.size(); i++) {
-              if (visibleAreaIds[i] == activeAreaId) {
-                index = i;
-                break;
-              }
-            }
-            confirmLabel = habitTabModel::tabLabel(visibleAreaIds[(index + 1) % visibleAreaIds.size()]);
-          }
-        } else if (visibleTabs.size() > 1) {
+        if (visibleTabs.size() > 1) {
           int index = 0;
           for (size_t i = 0; i < visibleTabs.size(); i++) {
             if (visibleTabs[i] == activeKind) {
@@ -1431,17 +1128,7 @@ void QuickPickActivity::render(RenderLock&&) {
         // A row is focused: Right1 goes Back up to the tab bar (see loop()'s
         // own Right1 handler); Right2 is whatever the row offers.
         backLabel = tr(STR_BACK);
-        if (section == Section::Habits) {
-          const int cacheIndex = habitTabModel::cacheIndexForRow(activeAreaId, habitSelectedRow);
-          if (cacheIndex < 0) {
-            confirmLabel = "";
-          } else if (habitTabModel::isLogsAreaId(activeAreaId)) {
-            const bool onCachedRow = HABITIFY_HABITS.getHabits()[static_cast<size_t>(cacheIndex)].hasPending();
-            confirmLabel = onCachedRow ? tr(STR_CLEAR_BUTTON) : "";
-          } else {
-            confirmLabel = tr(STR_SELECT);
-          }
-        } else if (activeKind == taskTabModel::TaskTabKind::LOGS) {
+        if (activeKind == taskTabModel::TaskTabKind::LOGS) {
           const int entryIndex = taskTabModel::logEntryIndexForRow(taskSelectedRow);
           const auto& entries = TODOIST_TASKS.getCompletedTodayEntries();
           const bool onCachedRow = entryIndex >= 0 && static_cast<size_t>(entryIndex) < entries.size() &&
@@ -1456,11 +1143,12 @@ void QuickPickActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, leftLabel, rightLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  // Side button labels (Up = "Tasks", Down = "Habits") -- which section
-  // shows below the companion (see loop()'s own comment above and
-  // switchSection()). The one showing is drawn inverted.
-  GUI.drawSideButtonHints(renderer, tasksLabel, habitsLabel,
-                          /*topSelected=*/section == Section::Tasks, /*bottomSelected=*/section == Section::Habits);
+  // Side button labels (Up = "F1", Down = "F2") -- which Todoist filter the
+  // section below the companion shows (see loop()'s own comment above and
+  // switchFilter()). The one showing is drawn inverted.
+  GUI.drawSideButtonHints(renderer, filter1Label, filter2Label,
+                          /*topSelected=*/APP_STATE.todoistActiveFilter == 0,
+                          /*bottomSelected=*/APP_STATE.todoistActiveFilter == 1);
 
   renderer.displayBuffer();
 }

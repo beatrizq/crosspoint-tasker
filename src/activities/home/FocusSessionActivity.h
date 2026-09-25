@@ -7,7 +7,7 @@
 
 /**
  * The locked countdown phase of a focus session: companion (shown in its
- * Focus pose for the whole session), speech bubble holding the task/habit
+ * Focus pose for the whole session), speech bubble holding the task
  * text, and "Focus session until hh:mm" underneath.
  * Stays awake (preventAutoSleep()) and swallows Back and the Home gesture for
  * as long as it is locked -- a deliberate commitment device, not an oversight,
@@ -31,12 +31,10 @@
 class FocusSessionActivity final : public Activity {
  public:
   FocusSessionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string text, std::string itemId,
-                       const bool isHabit, const int32_t endAbsMinutes, const uint8_t endHourUtc,
-                       const uint8_t endMinuteUtc)
+                       const int32_t endAbsMinutes, const uint8_t endHourUtc, const uint8_t endMinuteUtc)
       : Activity("FocusSession", renderer, mappedInput),
         text(std::move(text)),
         itemId(std::move(itemId)),
-        isHabit(isHabit),
         endAbsMinutes(endAbsMinutes),
         endHourUtc(endHourUtc),
         endMinuteUtc(endMinuteUtc) {}
@@ -50,7 +48,6 @@ class FocusSessionActivity final : public Activity {
  private:
   std::string text;
   std::string itemId;
-  bool isHabit;
   // See computeFocusSessionEnd()/HalClock::formatHourMinute() for what these
   // mean; both are UTC.
   int32_t endAbsMinutes;

@@ -15,7 +15,7 @@
  * case a timed Focus/Break screen is wanted again -- delete it if not.
  *
  * The locked countdown phase of a timed Focus or Break session, as opposed
- * to a task/habit-linked one (see FocusSessionActivity for that). No item
+ * to a task-linked one (see FocusSessionActivity for that). No item
  * is attached here: the companion just shows a fixed mood
  * (companion::Mood::Focus or ::Break) for the picked duration, with a short
  * speech-bubble label ("Focus"/"Break") and "Until hh:mm" underneath -- same

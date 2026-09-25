@@ -11,9 +11,9 @@
  *   {"results":[{"id":"...","content":"...",
  *                "due":{"date":"2026-08-17","is_recurring":false,...},...}],"next_cursor":null}
  *
- * Only id, content, due.date and due.is_recurring are kept; every other field
- * (project, labels, priority, description, duration) is walked past without
- * being stored. The body is fed in as it arrives off the socket, so a
+ * Only id, content, labels, due.date and due.is_recurring are kept; every
+ * other field (project, priority, description, duration) is walked past
+ * without being stored. The body is fed in as it arrives off the socket, so a
  * 200-task response never exists in RAM as a whole — only the ~200 bytes of
  * the task being assembled.
  */
@@ -21,8 +21,10 @@ class TodoistTasksParser {
  public:
   // Invoked once per task object, as soon as it closes. dueDate is "" when the
   // task has no due object (possible for tasks pulled in by a filter's
-  // secondary clauses); isRecurring is meaningless in that case too.
-  using TaskSink = void (*)(void* ctx, const char* id, const char* content, const char* dueDate, bool isRecurring);
+  // secondary clauses); isRecurring is meaningless in that case too. labels is
+  // the task's labels joined as "a, b" (truncated), "" when it has none.
+  using TaskSink = void (*)(void* ctx, const char* id, const char* content, const char* dueDate, bool isRecurring,
+                            const char* labels);
 
   TodoistTasksParser(TaskSink sink, void* sinkCtx);
 
@@ -49,6 +51,7 @@ class TodoistTasksParser {
     TASK_ID,
     TASK_CONTENT,
     TASK_DUE,
+    TASK_LABELS,
     DUE_DATE,
     DUE_IS_RECURRING,
   };
@@ -71,9 +74,10 @@ class TodoistTasksParser {
 
   Position position;
   LastKey lastKey;
-  uint8_t depth;      // Object/array nesting outside the results array
-  uint8_t taskDepth;  // Nesting inside the current task object (1 = task itself)
-  uint8_t dueDepth;   // taskDepth of the task's due object; 0 when not inside it
+  uint8_t depth;        // Object/array nesting outside the results array
+  uint8_t taskDepth;    // Nesting inside the current task object (1 = task itself)
+  uint8_t dueDepth;     // taskDepth of the task's due object; 0 when not inside it
+  uint8_t labelsDepth;  // taskDepth of the task's labels array; 0 when not inside it
   size_t tasksSeen;
 
   // Ids are 19-digit numerics or 16-char alphanumerics today; dates are
@@ -82,4 +86,10 @@ class TodoistTasksParser {
   char currentContent[121];
   char currentDue[11];
   bool currentIsRecurring;
+  // Labels joined with ", " -- 48 characters (TodoistTask::LABELS_MAX_LEN) is
+  // what the Companion has room to show, so anything past it is dropped here
+  // rather than carried through the cache.
+  char currentLabels[49];
+  size_t currentLabelsLen;
+  bool labelsFull;  // a label did not fit: the rest are dropped too, so the order stays meaningful
 };

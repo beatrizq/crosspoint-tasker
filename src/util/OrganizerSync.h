@@ -6,15 +6,15 @@
 /**
  * The network half of each organizer screen's sync, callable on its own.
  *
- * Each of Tasks, Calendar, Budget and Habits used to own its whole sync: the
+ * Each of Tasks and Calendar used to own its whole sync: the
  * requests, applying the result to its cache, and the radio either side. That
  * left no way to sync more than one at a time, and the home screen's "sync
- * everything" needs exactly that - four services over one Wi-Fi association
- * rather than four.
+ * everything" needs exactly that - two services over one Wi-Fi association
+ * rather than two.
  *
  * So the request-and-apply part lives here and the radio does not. Bringing the
  * association up and taking it down belongs to the caller, which is what lets a
- * caller syncing all four pay for it once. Nothing here renders, holds screen
+ * caller syncing both pay for it once. Nothing here renders, holds screen
  * state, or reports progress; the caller owns all of that.
  *
  * These block for as long as the requests take - tens of seconds over a slow
@@ -26,11 +26,9 @@ namespace organizerSync {
 enum class Service : uint8_t {
   Tasks = 0,
   Calendar = 1,
-  Budget = 2,
-  Habits = 3,
 };
 
-constexpr int SERVICE_COUNT = 4;
+constexpr int SERVICE_COUNT = 2;
 
 inline Service serviceAt(const int index) { return static_cast<Service>(index); }
 

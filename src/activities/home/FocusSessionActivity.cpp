@@ -28,7 +28,7 @@ constexpr int BUBBLE_GAP = 4;
 constexpr int MARGIN = 24;
 // Between the character's feet and the "until hh:mm" line.
 constexpr int UNTIL_GAP = 4;
-// Floor on the bubble's text column, so a one-word habit name still leaves
+// Floor on the bubble's text column, so a one-word task name still leaves
 // room for the tail and rounded corners rather than shrinking to fit it
 // exactly.
 constexpr int MIN_BUBBLE_TEXT_WIDTH = 80;
@@ -67,7 +67,6 @@ void FocusSessionActivity::onEnter() {
   APP_STATE.focusSessionActive = true;
   APP_STATE.focusSessionText = text;
   APP_STATE.focusSessionItemId = itemId;
-  APP_STATE.focusSessionIsHabit = isHabit;
   APP_STATE.focusSessionEndAbsMinutes = endAbsMinutes;
   APP_STATE.focusSessionEndHour = endHourUtc;
   APP_STATE.focusSessionEndMinute = endMinuteUtc;

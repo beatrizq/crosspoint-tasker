@@ -270,9 +270,8 @@ void TasksActivity::offerFocusSession(const int cacheIndex) {
                            if (result.isCancelled) return;
                            const int idx = std::get<OptionPickResult>(result.data).index;
                            if (idx < 0 || idx >= organizerActions::FOCUS_SESSION_DURATIONS_COUNT) return;
-                           organizerActions::beginFocusSession(text, id, /*isHabit=*/false,
-                                                               organizerActions::FOCUS_SESSION_DURATIONS_MINUTES[idx],
-                                                               renderer, mappedInput);
+                           organizerActions::beginFocusSession(
+                               text, id, organizerActions::FOCUS_SESSION_DURATIONS_MINUTES[idx], renderer, mappedInput);
                          });
 }
 

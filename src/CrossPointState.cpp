@@ -30,10 +30,10 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["lastSleepFromReader"] = lastSleepFromReader;
   doc["showBootScreen"] = showBootScreen;
   doc["lastSleepFromQuickPick"] = lastSleepFromQuickPick;
+  doc["todoistActiveFilter"] = todoistActiveFilter;
   doc["focusSessionActive"] = focusSessionActive;
   doc["focusSessionText"] = focusSessionText;
   doc["focusSessionItemId"] = focusSessionItemId;
-  doc["focusSessionIsHabit"] = focusSessionIsHabit;
   doc["focusSessionEndAbsMinutes"] = focusSessionEndAbsMinutes;
   doc["focusSessionEndHour"] = focusSessionEndHour;
   doc["focusSessionEndMinute"] = focusSessionEndMinute;
@@ -65,10 +65,11 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   lastSleepFromReader = doc["lastSleepFromReader"] | false;
   showBootScreen = doc["showBootScreen"] | true;
   lastSleepFromQuickPick = doc["lastSleepFromQuickPick"] | false;
+  todoistActiveFilter = doc["todoistActiveFilter"] | static_cast<uint8_t>(0);
+  if (todoistActiveFilter > 1) todoistActiveFilter = 0;
   focusSessionActive = doc["focusSessionActive"] | false;
   focusSessionText = doc["focusSessionText"] | "";
   focusSessionItemId = doc["focusSessionItemId"] | "";
-  focusSessionIsHabit = doc["focusSessionIsHabit"] | false;
   focusSessionEndAbsMinutes = doc["focusSessionEndAbsMinutes"] | static_cast<int32_t>(0);
   focusSessionEndHour = doc["focusSessionEndHour"] | static_cast<uint8_t>(0);
   focusSessionEndMinute = doc["focusSessionEndMinute"] | static_cast<uint8_t>(0);

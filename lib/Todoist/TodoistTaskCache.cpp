@@ -17,6 +17,10 @@ void TodoistTaskCache::toJson(JsonDocument& doc) const {
     todoist::isoFromDueDays(task.dueDays, iso, sizeof(iso));
     if (iso[0] != '\0') obj["due"] = iso;
     obj["isRecurring"] = task.isRecurring;
+    // Only written when it says something: Filter 1 alone is what a card
+    // written before there were two filters holds.
+    if (task.filterMask != TodoistTask::FILTER_1_BIT) obj["filters"] = task.filterMask;
+    if (!task.labels.empty()) obj["labels"] = task.labels;
   }
   JsonArray pending = doc["pending"].to<JsonArray>();
   for (const auto& id : pendingIds) {
@@ -86,6 +90,12 @@ bool TodoistTaskCache::fromJson(JsonVariantConst doc) {
     task.content = obj["content"] | "";
     task.dueDays = todoist::dueDaysFromIso(obj["due"] | "");
     task.isRecurring = obj["isRecurring"] | false;
+    task.labels = obj["labels"] | "";
+    if (task.labels.size() > TodoistTask::LABELS_MAX_LEN) task.labels.resize(TodoistTask::LABELS_MAX_LEN);
+    task.filterMask = obj["filters"] | static_cast<uint8_t>(TodoistTask::FILTER_1_BIT);
+    if ((task.filterMask & (TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT)) == 0) {
+      task.filterMask = TodoistTask::FILTER_1_BIT;
+    }
     if (task.id.empty()) continue;
     tasks.push_back(std::move(task));
   }
@@ -112,8 +122,8 @@ bool TodoistTaskCache::fromJson(JsonVariantConst doc) {
     // DUE_NONE is a real, intentional value here -- a pending "clear the due
     // date" reschedule -- not just what a malformed "due" parses to, so it is
     // not skipped the way an empty id is. Dropping it silently would mean a
-    // reboot loses that pending sync entirely, the same class of bug a habit
-    // completion's own pending flag once had.
+    // reboot loses that pending sync entirely, the same class of bug a lost
+    // pending completion is.
     pendingReschedules.push_back({id, todoist::dueDaysFromIso(obj["due"] | "")});
   }
 

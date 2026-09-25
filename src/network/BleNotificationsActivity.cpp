@@ -27,7 +27,7 @@ namespace {
 constexpr unsigned long LONG_PRESS_MS = 1000;
 
 // Same font selection as OrganizerScreenActivity's titleFontId()/
-// subtitleFontId() (Tasks/Calendar/Budget/Habits) -- not inherited from
+// subtitleFontId() (Tasks/Calendar) -- not inherited from
 // there, since that base class also brings tabs and an unconditional
 // WiFi-teardown reboot-on-exit this screen has no use for, but the user
 // asked for the same reading experience, so the two font choices are kept in
@@ -218,7 +218,7 @@ void BleNotificationsActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  // Same header-status slot Tasks/Calendar/Budget/Habits use for their own
+  // Same header-status slot Tasks/Calendar use for their own
   // sync info -- this screen isn't an OrganizerScreenActivity (see this
   // file's own header comment), so it sets the status directly rather than
   // through that base class's formatStatus() override point.

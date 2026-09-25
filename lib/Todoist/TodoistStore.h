@@ -28,6 +28,10 @@ class TodoistStore : public PersistableStore<TodoistStore> {
   // What the Tasks screen holds is whatever this matches; the tabs only split it
   // afterwards. Defaults to DEFAULT_FILTER on a card that has never had one.
   std::string filter = DEFAULT_FILTER;
+  // The second filter, shown by the Companion's other side button. Fetched and
+  // cached alongside the first (see TodoistTask::filterMask), so switching
+  // between them never needs a sync.
+  std::string filter2 = DEFAULT_FILTER;
 
   TodoistStore() = default;
   ~TodoistStore() = default;
@@ -54,6 +58,17 @@ class TodoistStore : public PersistableStore<TodoistStore> {
 
   void setFilter(const std::string& value);
   const std::string& getFilter() const { return filter; }
+  void setFilter2(const std::string& value);
+  const std::string& getFilter2() const { return filter2; }
+
+  // Whether the two filters are the same query, in which case a sync fetches it
+  // once and every task carries both bits.
+  bool filtersMatch() const { return filter == filter2; }
+
+  // One query that matches whatever either filter matches, for the
+  // completed-tasks record (which is not split per filter). Just Filter 1 when
+  // both are the same, or when combining them would exceed Todoist's length cap.
+  std::string getCombinedFilter() const;
 };
 
 #define TODOIST_STORE TodoistStore::getInstance()

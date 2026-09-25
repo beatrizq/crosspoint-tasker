@@ -168,7 +168,7 @@ class OrganizerScreenActivity : public Activity {
   // release is still owed, so it is dropped rather than acted on.
   bool swallowConfirmRelease = false;
   // Same idea for Back: cancelling a popup pushed from this screen (completing
-  // a task, logging a habit) also acts on the button going down, so its
+  // a task) also acts on the button going down, so its
   // release lands back here too. Unswallowed, it reads as "leave this screen"
   // and the cancel takes the user all the way back to Home instead of just
   // closing the popup.

@@ -19,8 +19,9 @@ namespace {
 constexpr int ROW_NICKNAME = 0;
 constexpr int ROW_TOKEN = 1;
 constexpr int ROW_FILTER = 2;
-constexpr int ROW_CLEAR = 3;
-constexpr int ROW_HINT = 4;
+constexpr int ROW_FILTER2 = 3;
+constexpr int ROW_CLEAR = 4;
+constexpr int ROW_HINT = 5;
 }  // namespace
 
 void TodoistSettingsActivity::onEnter() {
@@ -113,20 +114,28 @@ void TodoistSettingsActivity::handleSelection() {
     return;
   }
 
-  if (selectedIndex == ROW_FILTER) {
+  if (selectedIndex == ROW_FILTER || selectedIndex == ROW_FILTER2) {
+    const bool second = selectedIndex == ROW_FILTER2;
     // Plain text, not a password: a filter is not a secret, and it is typed by
     // hand so a mistyped one has to be visible to be fixable.
     startActivityForResult(
         std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_TODOIST_ENTER_FILTER),
-                                                TODOIST_STORE.getFilter(), TodoistStore::MAX_FILTER_LEN),
-        [this](const ActivityResult& result) {
+                                                second ? TODOIST_STORE.getFilter2() : TODOIST_STORE.getFilter(),
+                                                TodoistStore::MAX_FILTER_LEN),
+        [this, second](const ActivityResult& result) {
           if (result.isCancelled) return;
-          TODOIST_STORE.setFilter(std::get<KeyboardResult>(result.data).text);
+          const std::string& text = std::get<KeyboardResult>(result.data).text;
+          if (second) {
+            TODOIST_STORE.setFilter2(text);
+          } else {
+            TODOIST_STORE.setFilter(text);
+          }
           TODOIST_STORE.saveToFile();
           // Only the next sync acts on this: the cached list is whatever the old
           // filter matched, and clearing it here would leave the screen blank
           // until the user found their way to a sync.
-          LOG_DBG("TDS", "Filter set to %s", TODOIST_STORE.getFilter().c_str());
+          LOG_DBG("TDS", "Filter %d set to %s", second ? 2 : 1,
+                  (second ? TODOIST_STORE.getFilter2() : TODOIST_STORE.getFilter()).c_str());
           requestUpdate();
         });
     return;
@@ -165,7 +174,9 @@ void TodoistSettingsActivity::render(RenderLock&&) {
           case ROW_TOKEN:
             return std::string(I18n::getInstance().get(StrId::STR_TODOIST_API_TOKEN));
           case ROW_FILTER:
-            return std::string(I18n::getInstance().get(StrId::STR_TODOIST_FILTER));
+            return std::string(I18n::getInstance().get(StrId::STR_TODOIST_FILTER)) + " 1";
+          case ROW_FILTER2:
+            return std::string(I18n::getInstance().get(StrId::STR_TODOIST_FILTER)) + " 2";
           case ROW_CLEAR:
             return std::string(I18n::getInstance().get(StrId::STR_CLEAR_BUTTON));
           default:
@@ -180,6 +191,7 @@ void TodoistSettingsActivity::render(RenderLock&&) {
         // value column, which is the only hint that a long filter is longer than
         // it looks.
         if (index == ROW_FILTER) return TODOIST_STORE.getFilter();
+        if (index == ROW_FILTER2) return TODOIST_STORE.getFilter2();
         return std::string("");
       },
       false, [](int index) -> bool { return index == ROW_HINT; });

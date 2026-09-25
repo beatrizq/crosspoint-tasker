@@ -10,6 +10,7 @@ void TodoistStore::toJson(JsonDocument& doc) const {
   // In the clear: a filter query is not a secret, and it is the one setting worth
   // being able to fix from a PC without retyping it on a touch keyboard.
   doc["filter"] = filter;
+  doc["filter2"] = filter2;
 }
 
 bool TodoistStore::fromJson(JsonVariantConst doc) {
@@ -20,6 +21,9 @@ bool TodoistStore::fromJson(JsonVariantConst doc) {
   filter = doc["filter"] | DEFAULT_FILTER;
   if (filter.empty()) filter = DEFAULT_FILTER;
   if (filter.size() > MAX_FILTER_LEN) filter.resize(MAX_FILTER_LEN);
+  filter2 = doc["filter2"] | DEFAULT_FILTER;
+  if (filter2.empty()) filter2 = DEFAULT_FILTER;
+  if (filter2.size() > MAX_FILTER_LEN) filter2.resize(MAX_FILTER_LEN);
 
   const char* obfuscated = doc["token_obf"] | "";
   if (obfuscated[0] != '\0') {
@@ -61,4 +65,20 @@ void TodoistStore::setFilter(const std::string& value) {
     return;
   }
   filter = value.size() > MAX_FILTER_LEN ? value.substr(0, MAX_FILTER_LEN) : value;
+}
+
+void TodoistStore::setFilter2(const std::string& value) {
+  // Same rule as setFilter(): an empty query would only ever look like a broken
+  // sync, so clearing it falls back to the default.
+  if (value.empty()) {
+    filter2 = DEFAULT_FILTER;
+    return;
+  }
+  filter2 = value.size() > MAX_FILTER_LEN ? value.substr(0, MAX_FILTER_LEN) : value;
+}
+
+std::string TodoistStore::getCombinedFilter() const {
+  if (filtersMatch()) return filter;
+  std::string combined = "(" + filter + ") | (" + filter2 + ")";
+  return combined.size() > MAX_FILTER_LEN ? filter : combined;
 }

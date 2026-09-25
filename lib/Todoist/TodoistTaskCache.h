@@ -63,8 +63,8 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   friend class PersistableStore<TodoistTaskCache>;
 
  public:
-  static constexpr size_t MAX_TASKS = TODOIST_MAX_TASKS;
-  static constexpr size_t MAX_PENDING = TODOIST_MAX_TASKS;
+  static constexpr size_t MAX_TASKS = TODOIST_MAX_CACHED_TASKS;
+  static constexpr size_t MAX_PENDING = TODOIST_MAX_CACHED_TASKS;
 
   static const char* getFilePath() { return "/.crosspoint/todoist_tasks.json"; }
   void toJson(JsonDocument& doc) const;

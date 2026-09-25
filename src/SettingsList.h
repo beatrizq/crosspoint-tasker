@@ -251,9 +251,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Value(StrId::STR_COMPANION_SLEEP_END_HOUR, &CrossPointSettings::companionSleepEndHour, {0, 23, 1},
                            "companionSleepEndHour", StrId::STR_COMPANION),
         // Mood ladder tuning. Independent per-field ranges are all the generic
-        // toJson()/fromJson() loop can enforce -- the happyPoints > satisfied-
-        // Points cross-field constraint can't be expressed here, so
+        // toJson()/fromJson() loop can enforce -- the satisfiedPoints < happyPoints <
+        // amazedPoints cross-field constraints can't be expressed here, so
         // CompanionTracker clamps again defensively wherever these are read.
+        SettingInfo::Value(StrId::STR_COMPANION_AMAZED_AT, &CrossPointSettings::companionAmazedPoints, {2, 30, 1},
+                           "companionAmazedPoints", StrId::STR_COMPANION),
         SettingInfo::Value(StrId::STR_COMPANION_HAPPY_AT, &CrossPointSettings::companionHappyPoints, {1, 20, 1},
                            "companionHappyPoints", StrId::STR_COMPANION),
         SettingInfo::Value(StrId::STR_COMPANION_SATISFIED_AT, &CrossPointSettings::companionSatisfiedPoints, {1, 20, 1},
@@ -350,10 +352,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "tasksNickname"),
         SettingInfo::String(StrId::STR_NICKNAME, &SETTINGS.calendarNickname[0], sizeof(SETTINGS.calendarNickname),
                             "calendarNickname"),
-        SettingInfo::String(StrId::STR_NICKNAME, &SETTINGS.budgetNickname[0], sizeof(SETTINGS.budgetNickname),
-                            "budgetNickname"),
-        SettingInfo::String(StrId::STR_NICKNAME, &SETTINGS.habitsNickname[0], sizeof(SETTINGS.habitsNickname),
-                            "habitsNickname"),
         SettingInfo::String(StrId::STR_NICKNAME, &SETTINGS.companionNickname[0], sizeof(SETTINGS.companionNickname),
                             "companionNickname"),
 

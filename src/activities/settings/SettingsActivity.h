@@ -19,8 +19,6 @@ enum class SettingAction {
   KOReaderSync,
   Todoist,
   GoogleCalendar,
-  Ynab,
-  Habitify,
   Companion,
   AppOrder,
   OPDSBrowser,

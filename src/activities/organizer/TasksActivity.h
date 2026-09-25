@@ -39,7 +39,7 @@
  * tagged Cached (a local completion not yet pushed -- Right2/Select undoes
  * it) or Synced (a sync already confirmed it, nothing local left to undo).
  * Absorbed from the old standalone Logs screen, which combined this with
- * Habits' own completions; HabitsActivity's own Logs tab is the habit half.
+ * completions.
  * The tab set/row-matching rules (including Logs) live in TaskTabModel,
  * shared with QuickPickActivity's own scaled-down embedded rendering of this
  * same screen below the companion figure, so the two never disagree.

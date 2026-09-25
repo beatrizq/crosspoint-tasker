@@ -5,13 +5,11 @@
 #include <FsHelpers.h>
 #include <GCalEventCache.h>
 #include <GfxRenderer.h>
-#include <HabitifyHabitCache.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <TodoistTaskCache.h>
 #include <Utf8.h>
 #include <Xtc.h>
-#include <YnabAccountCache.h>
 
 #include <algorithm>
 #include <cstring>
@@ -44,10 +42,6 @@ HomeMenuItem homeMenuItemFor(const homeAppOrder::AppId id) {
       return HomeMenuItem::TASKS;
     case homeAppOrder::AppId::Calendar:
       return HomeMenuItem::CALENDAR;
-    case homeAppOrder::AppId::Budget:
-      return HomeMenuItem::BUDGET;
-    case homeAppOrder::AppId::Habits:
-      return HomeMenuItem::HABITS;
     case homeAppOrder::AppId::Notifications:
       return HomeMenuItem::NOTIFICATIONS;
     case homeAppOrder::AppId::Companion:
@@ -351,12 +345,6 @@ void HomeActivity::loop() {
       case HomeMenuItem::CALENDAR:
         activityManager.goToCalendar();
         break;
-      case HomeMenuItem::BUDGET:
-        activityManager.goToBudget();
-        break;
-      case HomeMenuItem::HABITS:
-        activityManager.goToHabits();
-        break;
 #ifdef ENABLE_BLE_NOTIFY_SPIKE
       case HomeMenuItem::NOTIFICATIONS:
         activityManager.goToBleNotifications();
@@ -566,22 +554,15 @@ void HomeActivity::render(RenderLock&&) {
         return std::string(label != nullptr ? label : "");
       },
       [&rows, leadingRecents](int index) { return rows[index + leadingRecents].icon; },
-      // Notification-style counts: tasks due today or overdue, habits not yet
-      // done today, today's events, today's transactions. Zero means no badge
+      // Notification-style counts: tasks due today or overdue, today's events.
+      // Zero means no badge
       // (checked by the theme).
       [&rows, leadingRecents](int index) -> int {
         switch (rows[index + leadingRecents].item) {
           case HomeMenuItem::TASKS:
             return static_cast<int>(TODOIST_TASKS.getDueTodayOrOverdueCount());
-          case HomeMenuItem::HABITS: {
-            const auto& habits = HABITIFY_HABITS.getHabits();
-            return static_cast<int>(
-                std::count_if(habits.begin(), habits.end(), [](const HabitifyHabit& h) { return !h.isComplete(); }));
-          }
           case HomeMenuItem::CALENDAR:
             return static_cast<int>(GCAL_EVENTS.getTodayCount());
-          case HomeMenuItem::BUDGET:
-            return static_cast<int>(YNAB_ACCOUNTS.getTodayTransactionCount());
 #ifdef ENABLE_BLE_NOTIFY_SPIKE
           case HomeMenuItem::NOTIFICATIONS:
             return static_cast<int>(BLE_NOTIFICATIONS.getUnreadCount());
@@ -622,7 +603,7 @@ void HomeActivity::render(RenderLock&&) {
     const Rect spriteBudget{centreX - budgetWidth / 2, centreY - budgetHeight / 2, budgetWidth, budgetHeight};
     drawCompanionIcon(spriteBudget);
 
-    // Today's points (tasks + habits combined) -- the same figure the mood
+    // Today's points -- the same figure the mood
     // ladder itself is evaluated against, so the badge reads as "how the
     // companion's day is going" rather than a to-do count the way the other
     // tiles' badges are. Drawn here, after the sprite, rather than through

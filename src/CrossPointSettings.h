@@ -171,8 +171,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // 24 bytes each: a name longer than that is truncated by the tile anyway.
   char tasksNickname[24] = "";
   char calendarNickname[24] = "";
-  char budgetNickname[24] = "";
-  char habitsNickname[24] = "";
   // Same idea, for the companion -- falls back to its own built-in character
   // name (CompanionTracker::displayName()) rather than an app's service name,
   // since the companion has no account behind it to keep listing.
@@ -319,13 +317,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t companionSleepEndHour = 7;
   uint8_t companionSleepEndMinute = 0;
   // Mood ladder tuning -- see MoodThresholds in lib/Companion/CompanionMood.h.
-  // Combined tasks+habits completed today needed for the top (Happy) tier.
-  // Must stay above companionSatisfiedPoints or Happy becomes unreachable --
-  // CompanionSettingsActivity clamps this on every edit, so these two only
-  // ever land here already valid; CompanionTracker clamps again on read as a
-  // backstop against a hand-edited settings.json.
+  // Tasks completed today needed for the top tier, Amazed. Must stay above
+  // companionHappyPoints or Amazed becomes unreachable.
+  uint8_t companionAmazedPoints = 8;
+  // Tasks completed today needed for the Happy tier.
+  // Must stay above companionSatisfiedPoints (and below companionAmazedPoints)
+  // or Happy becomes unreachable -- CompanionSettingsActivity clamps these on
+  // every edit, so they only ever land here already valid; CompanionTracker
+  // clamps again on read as a backstop against a hand-edited settings.json.
   uint8_t companionHappyPoints = 3;
-  // Combined tasks+habits completed today needed to count as "did something"
+  // Tasks completed today needed to count as "did something"
   // (Satisfied) rather than starting the Cranky/Neglected decay. Must stay
   // >= 1 -- 0 would mean every day, even an empty one, already qualifies,
   // making the decay tiers unreachable.

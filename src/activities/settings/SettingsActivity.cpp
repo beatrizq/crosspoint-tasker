@@ -18,7 +18,6 @@
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
 #include "GCalSettingsActivity.h"
-#include "HabitifySettingsActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
@@ -31,7 +30,6 @@
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
 #include "TodoistSettingsActivity.h"
-#include "YnabSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
@@ -94,8 +92,6 @@ void SettingsActivity::rebuildSettingsLists() {
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_APP_ORDER, SettingAction::AppOrder));
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_TODOIST, SettingAction::Todoist));
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_CALENDAR, SettingAction::GoogleCalendar));
-  organizerSettings.push_back(SettingInfo::Action(StrId::STR_YNAB, SettingAction::Ynab));
-  organizerSettings.push_back(SettingInfo::Action(StrId::STR_HABITIFY, SettingAction::Habitify));
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_COMPANION, SettingAction::Companion));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   // TODO: Touch devices need their own firmware update path/artifacts before OTA is exposed.
@@ -455,12 +451,6 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::GoogleCalendar:
         startActivityForResult(std::make_unique<GCalSettingsActivity>(renderer, mappedInput), resultHandler);
-        break;
-      case SettingAction::Ynab:
-        startActivityForResult(std::make_unique<YnabSettingsActivity>(renderer, mappedInput), resultHandler);
-        break;
-      case SettingAction::Habitify:
-        startActivityForResult(std::make_unique<HabitifySettingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::Companion:
         startActivityForResult(std::make_unique<CompanionSettingsActivity>(renderer, mappedInput), resultHandler);

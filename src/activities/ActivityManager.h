@@ -20,9 +20,7 @@
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
-// TASKS, CALENDAR, BUDGET and HABITS are a tile and a screen each. The first
-// three shared one screen with a three-way tab bar until each grew tabs of its
-// own; HABITS joined them as a fourth.
+// TASKS and CALENDAR are a tile and a screen each.
 enum class HomeMenuItem {
   NONE,
   READ_MENU,
@@ -30,8 +28,6 @@ enum class HomeMenuItem {
   RECENTS,
   TASKS,
   CALENDAR,
-  BUDGET,
-  HABITS,
   OPDS_BROWSER,
   FILE_TRANSFER,
   SETTINGS_MENU,
@@ -121,15 +117,11 @@ class ActivityManager {
   void goToRecentBooks(bool returnToReadMenu = false);
   // initialTab is an index into the target screen's tab bar; the header cannot
   // name those types without pulling the activities in. Out-of-range values are
-  // clamped to the first tab by OrganizerScreenActivity::onEnter(), which matters
-  // for Budget: its tab count follows how many accounts are cached.
-  // selectTaskId/selectHabitId, when non-empty, land the screen on that
-  // specific task/habit's row instead of row 0 -- see TasksActivity's and
-  // HabitsActivity's own constructor comments.
+  // clamped to the first tab by OrganizerScreenActivity::onEnter().
+  // selectTaskId, when non-empty, lands the screen on that specific task's row
+  // instead of row 0 -- see TasksActivity's own constructor comment.
   void goToTasks(uint8_t initialTab = 0, std::string selectTaskId = "");  // 0 = first tab
   void goToCalendar();
-  void goToBudget(uint8_t initialTab = 0);  // 0 = Plan
-  void goToHabits(std::string selectHabitId = "");
   // Only reachable when ENABLE_BLE_NOTIFY_SPIKE is defined -- see
   // BleNotifyRelay's own doc comment. HomeActivity never offers this tile
   // otherwise, so no caller outside that build should ever invoke it.

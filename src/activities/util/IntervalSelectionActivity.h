@@ -14,8 +14,7 @@ class GfxRenderer;
 class IntervalSelectionActivity final : public Activity {
  public:
   // `customTitle` and `valueSuffix` are for callers whose title or unit is a
-  // runtime string rather than a translated StrId (e.g. a habit's name and
-  // its Habitify unit symbol) - left empty, titleId/valueFormatId behave
+  // runtime string rather than a translated StrId (e.g. a task's name) - left empty, titleId/valueFormatId behave
   // exactly as before.
   explicit IntervalSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* activityName,
                                      StrId titleId, int initialValue, int minValue, int maxValue, int smallStep,

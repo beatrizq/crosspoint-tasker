@@ -145,8 +145,6 @@ enum UIIcon {
   Bookmark,
   Tasks,
   Calendar,
-  Budget,
-  Habits,
   Bell
 };
 

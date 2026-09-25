@@ -35,10 +35,13 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // wall clock at boot rather than via a lastSleepFromX flag like the quick-pick
   // fields above: a stale flag from a session that already finished needs telling
   // apart from a live one, and the end time itself already does that.
+  // Which Todoist filter the Companion's lists show: 0 = Filter 1, 1 = Filter 2
+  // (the two side buttons). Persisted so a reboot keeps the view.
+  uint8_t todoistActiveFilter = 0;
+
   bool focusSessionActive = false;
   std::string focusSessionText;
   std::string focusSessionItemId;
-  bool focusSessionIsHabit = false;
   // Absolute end time as (UTC day number * 1440) + minute-of-day, comparable
   // across a reboot without any calendar bookkeeping -- see
   // companion::localDayNumber() and organizerActions::computeFocusSessionEnd().
@@ -52,7 +55,7 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // A running timed Focus/Break session (see CompanionSessionActivity, which
   // nothing starts any more -- these stay false) -- same resume story as
   // focusSessionActive above, kept as its own separate set of fields rather
-  // than reusing those since this session has no task/habit item attached,
+  // than reusing those since this session has no task item attached,
   // just a fixed companion::Mood override.
   bool companionSessionActive = false;
   uint8_t companionSessionMood = 0;  // companion::Mood::Focus or ::Break, cast to uint8_t

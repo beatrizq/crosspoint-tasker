@@ -20,9 +20,7 @@
 #include "network/BleNotificationsActivity.h"
 #endif
 #include "home/QuickPickActivity.h"
-#include "organizer/BudgetActivity.h"
 #include "organizer/CalendarActivity.h"
-#include "organizer/HabitsActivity.h"
 #include "organizer/SyncAllActivity.h"
 #include "organizer/TasksActivity.h"
 #include "reader/ReaderActivity.h"
@@ -217,10 +215,6 @@ void ActivityManager::goToTasks(const uint8_t initialTab, std::string selectTask
 
 void ActivityManager::goToCalendar() { replaceActivity(std::make_unique<CalendarActivity>(renderer, mappedInput)); }
 
-void ActivityManager::goToHabits(std::string selectHabitId) {
-  replaceActivity(std::make_unique<HabitsActivity>(renderer, mappedInput, std::move(selectHabitId)));
-}
-
 void ActivityManager::goToSyncAll(std::function<void()> onReturn) {
   replaceActivity(std::make_unique<SyncAllActivity>(renderer, mappedInput, std::move(onReturn)));
 }
@@ -230,10 +224,6 @@ void ActivityManager::goToBleNotifications() {
   replaceActivity(std::make_unique<BleNotificationsActivity>(renderer, mappedInput));
 }
 #endif
-
-void ActivityManager::goToBudget(const uint8_t initialTab) {
-  replaceActivity(std::make_unique<BudgetActivity>(renderer, mappedInput, static_cast<int>(initialTab)));
-}
 
 void ActivityManager::goToReadMenu() { replaceActivity(std::make_unique<ReadMenuActivity>(renderer, mappedInput)); }
 
@@ -287,12 +277,6 @@ void ActivityManager::goToApp(const homeAppOrder::AppId id) {
       return;
     case homeAppOrder::AppId::Calendar:
       goToCalendar();
-      return;
-    case homeAppOrder::AppId::Budget:
-      goToBudget();
-      return;
-    case homeAppOrder::AppId::Habits:
-      goToHabits();
       return;
     case homeAppOrder::AppId::Notifications:
       // adjacentVisibleApp() already skips this app entirely when

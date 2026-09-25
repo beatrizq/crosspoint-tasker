@@ -46,7 +46,8 @@ class TodoistClient {
   };
 
   /**
-   * Fetch whatever the Filter setting matches, in one filter query. The Tasks
+   * Fetch whatever `filter` (one of the two Filter settings) matches, in one
+   * filter query. The Tasks
    * screen splits the result into Overdue, Today, Upcoming and No date against
    * the date it settles on; it does not narrow it further.
    *
@@ -70,8 +71,8 @@ class TodoistClient {
    * host so SecureHttpClient's own keep-alive can actually take effect (see
    * organizerSync::runTasks()) - this function neither constructs nor ends it.
    */
-  static Error fetchTasks(freeink::SecureHttpClient& http, std::vector<TodoistTask>& outTasks,
-                          std::string& outServerDate);
+  static Error fetchTasks(freeink::SecureHttpClient& http, const std::string& filter,
+                          std::vector<TodoistTask>& outTasks, std::string& outServerDate);
 
   /**
    * Complete a task. A 404 is reported as OK: the task is already gone from the
@@ -103,7 +104,7 @@ class TodoistClient {
                               const std::string& isoDueDate);
 
   /**
-   * Counts tasks matching the Filter setting that Todoist recorded as completed
+   * Counts tasks matching `filter` that Todoist recorded as completed
    * on `isoDate` ("YYYY-MM-DD") - on this device, in the Todoist app, or on the
    * web. Unlike fetchTasks(), which only ever sees tasks still open, this asks
    * Todoist's own completed-tasks record directly, so a task finished anywhere
@@ -126,8 +127,9 @@ class TodoistClient {
    *
    * `http`: caller-owned connection -- see fetchTasks()'s own parameter doc.
    */
-  static Error fetchCompletedCountForDay(freeink::SecureHttpClient& http, const std::string& isoDate,
-                                         uint16_t& outCount, TodoistCompletedCountParser::TitleSink titleSink = nullptr,
+  static Error fetchCompletedCountForDay(freeink::SecureHttpClient& http, const std::string& filter,
+                                         const std::string& isoDate, uint16_t& outCount,
+                                         TodoistCompletedCountParser::TitleSink titleSink = nullptr,
                                          void* titleSinkCtx = nullptr);
 
   /** Diagnostic message for logs. User-facing text is translated by the caller. */

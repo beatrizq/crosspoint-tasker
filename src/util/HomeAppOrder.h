@@ -27,21 +27,21 @@
 namespace homeAppOrder {
 
 /**
- * Stable per-app id. These are written to the settings file, so the numbers are
- * part of the format: append new apps, never renumber or reuse.
+ * Per-app id. These are written to the settings file as the home order. Budget
+ * and Habits were removed and the ids after them closed up, so an order saved
+ * before then reads as a different (but still complete) order: parse() takes
+ * whatever ids it recognises and appends every app the string does not name.
  */
 enum class AppId : uint8_t {
   Read = 0,
   Tasks = 1,
   Calendar = 2,
-  Budget = 3,
-  Habits = 4,
   // Only ever a real, selectable tile in builds with ENABLE_BLE_NOTIFY_SPIKE
   // defined (see BleNotifyRelay's own doc comment) -- HomeActivity skips it
   // from the grid otherwise. Kept as a real id in every build regardless, not
   // just the spike one, so this table and the persisted order format stay
   // identical across build flavors.
-  Notifications = 5,
+  Notifications = 3,
   // Always enabled -- there is no companion on/off toggle any more (see
   // CompanionSettingsActivity's own header comment); ActivityManager::
   // goHome() opens the companion's own screen unconditionally. Its icon is
@@ -50,20 +50,20 @@ enum class AppId : uint8_t {
   // and its display name prefers its character's built-in name over this
   // table's generic appName when no nickname is set -- see
   // CompanionTracker::displayName().
-  Companion = 6,
+  Companion = 4,
   // Always a real, selectable tile -- unlike Notifications/Companion, there is
   // no condition it is ever hidden behind. Opens the same Settings screen the
   // gear icon always has; Home's own Back button no longer does (see
   // HomeActivity's own comment on its Back handling).
-  Settings = 7,
+  Settings = 5,
 };
 
-constexpr int APP_COUNT = 8;
+constexpr int APP_COUNT = 6;
 
 struct AppInfo {
   AppId id;
-  // The app's own name - Todoist, Google Calendar, YNAB, Habitify - which is what
-  // it is called until a nickname is set. Not the generic "Tasks"/"Budget" the
+  // The app's own name - Todoist, Google Calendar - which is what
+  // it is called until a nickname is set. Not the generic "Tasks" the
   // tiles used to carry: an app is easier to recognise by the account it talks to.
   StrId appName;
   UIIcon icon;
@@ -94,7 +94,7 @@ const char* displayName(AppId id);
 char* nicknameField(AppId id, size_t& outSize);
 
 /** The default order string, used when nothing is stored or it is unusable. */
-constexpr const char* DEFAULT_ORDER = "01234";
+constexpr const char* DEFAULT_ORDER = "012";
 
 // Room for one digit per app plus the terminator. Sized with headroom so adding
 // apps does not need a settings-file migration.

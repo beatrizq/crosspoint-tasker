@@ -8,13 +8,11 @@ namespace homeAppOrder {
 namespace {
 
 // Built-in order. Read leads because the cover card above it opens the last book
-// and this opens everything else about books; the four integrations follow.
+// and this opens everything else about books; the integrations follow.
 constexpr AppInfo APPS[APP_COUNT] = {
     {AppId::Read, StrId::STR_MENU_READ, UIIcon::Book},
     {AppId::Tasks, StrId::STR_TODOIST, UIIcon::Tasks},
     {AppId::Calendar, StrId::STR_GOOGLE_CALENDAR, UIIcon::Calendar},
-    {AppId::Budget, StrId::STR_YNAB, UIIcon::Budget},
-    {AppId::Habits, StrId::STR_HABITIFY, UIIcon::Habits},
     {AppId::Notifications, StrId::STR_BLE_NOTIFICATIONS, UIIcon::Bell},
     // None: drawn dynamically instead (see AppId::Companion's own comment).
     {AppId::Companion, StrId::STR_COMPANION, UIIcon::None},
@@ -36,12 +34,6 @@ char* nicknameField(const AppId id, size_t& outSize) {
     case AppId::Calendar:
       outSize = sizeof(SETTINGS.calendarNickname);
       return SETTINGS.calendarNickname;
-    case AppId::Budget:
-      outSize = sizeof(SETTINGS.budgetNickname);
-      return SETTINGS.budgetNickname;
-    case AppId::Habits:
-      outSize = sizeof(SETTINGS.habitsNickname);
-      return SETTINGS.habitsNickname;
     case AppId::Read:
       // Read is not an integration - it has no account, no settings screen of its
       // own, and so nothing to rename it from.

@@ -56,10 +56,12 @@ struct ParsedTask {
   std::string content;
   std::string due;
   bool isRecurring;
+  std::string labels;
 };
 
-void collect(void* ctx, const char* id, const char* content, const char* due, const bool isRecurring) {
-  static_cast<std::vector<ParsedTask>*>(ctx)->push_back({id, content, due, isRecurring});
+void collect(void* ctx, const char* id, const char* content, const char* due, const bool isRecurring,
+             const char* labels) {
+  static_cast<std::vector<ParsedTask>*>(ctx)->push_back({id, content, due, isRecurring, labels});
 }
 
 std::vector<ParsedTask> parseInChunks(const char* body, size_t chunkSize) {
@@ -109,6 +111,30 @@ TEST(TodoistTasksParser, ExtractsIsRecurring) {
   EXPECT_TRUE(tasks[1].isRecurring);   // due.is_recurring: true
   EXPECT_FALSE(tasks[2].isRecurring);  // due: null - nothing to be recurring
   EXPECT_FALSE(tasks[3].isRecurring);  // due present, is_recurring key absent
+}
+
+// Labels are kept as one ", "-joined string; an empty array, or no labels key at
+// all, gives "" -- and a label never bleeds from one task into the next.
+TEST(TodoistTasksParser, ExtractsLabels) {
+  const auto tasks = parseInChunks(kRealisticResponse, 4096);
+
+  ASSERT_EQ(tasks.size(), 4u);
+  EXPECT_EQ(tasks[0].labels, "urgent, work");
+  EXPECT_EQ(tasks[1].labels, "");  // "labels": []
+  EXPECT_EQ(tasks[2].labels, "");
+  EXPECT_EQ(tasks[3].labels, "");  // no labels key
+}
+
+// More labels than the buffer holds: whole labels only, never a truncated one.
+TEST(TodoistTasksParser, DropsLabelsThatDoNotFit) {
+  const char* body = R"({"results":[{"id":"a","content":"c","labels":
+    ["aaaaaaaaaaaaaaaaaaaa","bbbbbbbbbbbbbbbbbbbb","cccccccccccccccccccc","dddd"]}]})";
+  const auto tasks = parseInChunks(body, 4096);
+
+  ASSERT_EQ(tasks.size(), 1u);
+  // 20 + 2 + 20 = 42; the third label would pass 48 so it is dropped, and "dddd"
+  // (which alone would fit) is dropped after it rather than leaving a gap.
+  EXPECT_EQ(tasks[0].labels, "aaaaaaaaaaaaaaaaaaaa, bbbbbbbbbbbbbbbbbbbb");
 }
 
 // The body arrives in TLS-sized chunks, so no field may depend on landing

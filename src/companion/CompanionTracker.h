@@ -7,11 +7,11 @@
 #include "CompanionSprites.generated.h"
 
 /**
- * @brief Runtime glue between the task/habit caches, the RTC, and CompanionState.
+ * @brief Runtime glue between the task cache, the RTC, and CompanionState.
  *
  * Reading the RTC costs an I2C transaction, so the day is resolved on demand
  * (screen entry, a completion) and cached; currentMood() only reads the cache
- * plus the in-RAM task/habit lists, so it is safe to call from render paths.
+ * plus the in-RAM task list, so it is safe to call from render paths.
  */
 class CompanionTracker {
  public:
@@ -39,19 +39,18 @@ class CompanionTracker {
   // render path. Home calls this every time it is entered.
   void refreshForDisplay();
 
-  // Call right after a task completes or habit progress changes, locally or
-  // via sync. Re-resolves the day, then credits today's combined tasks+habits
-  // total into the ledger -- the qualifying-day marker the first time it
+  // Call right after a task completes, locally or via sync. Re-resolves the
+  // day, then credits today's completed tasks into the ledger -- the qualifying-day marker the first time it
   // clears the bar this day, and the best-day-points record on every call
   // that beats it -- and persists only when something actually changed.
   void recordActivity();
 
-  // Cheap: uses the cached day plus live reads of today's task/habit counts
-  // from their own caches. No I2C, no SD.
+  // Cheap: uses the cached day plus live read of today's task count
+  // from its own cache. No I2C, no SD.
   companion::Mood currentMood() const;
 
-  // Combined tasks+habits points credited today, the same figure evaluate()
-  // sums against MoodThresholds. A progress hint built on it can never
+  // Tasks completed today, the same figure evaluate()
+  // compares against MoodThresholds. A progress hint built on it can never
   // disagree with the pose on screen.
   uint16_t pointsToday() const;
 
@@ -83,11 +82,6 @@ class CompanionTracker {
   // rather than two I2C transactions that could straddle a midnight rollover.
   static bool resolveLocalDayAndMinute(int32_t& outDay, uint16_t& outMinuteOfDay);
 
-  // Habits marked complete right now, read live from HABITIFY_HABITS -- it
-  // already resets daily on its own, so nothing about it needs persisting
-  // here.
-  static uint16_t liveHabitsCompletedToday();
-
   // Single source for the mood inputs, so the pose and any figure shown beside
   // it are always derived from the same numbers. `thresholds` matters for its
   // satisfiedPoints -- see MoodInput::daysSinceLastActive's fallback logic in
@@ -96,7 +90,7 @@ class CompanionTracker {
   companion::MoodInput buildMoodInput(const companion::MoodThresholds& thresholds) const;
 
   // Cheap: cached minute-of-day plus the settings fields, no I2C. Gated on
-  // clockValid the same way the Milestone check is -- a stale minuteOfDay
+  // clockValid the same way the other day-based checks are -- a stale minuteOfDay
   // from before the clock was last valid must not accidentally match.
   bool isWithinSleepWindow() const;
 

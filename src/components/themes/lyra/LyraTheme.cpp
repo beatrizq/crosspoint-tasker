@@ -22,14 +22,12 @@
 #include "components/icons/book.h"
 #include "components/icons/book24.h"
 #include "components/icons/bookmark.h"
-#include "components/icons/budget80.h"
 #include "components/icons/calendar.h"
 #include "components/icons/calendar80.h"
 #include "components/icons/cover.h"
 #include "components/icons/file24.h"
 #include "components/icons/folder.h"
 #include "components/icons/folder24.h"
-#include "components/icons/habits80.h"
 #include "components/icons/hotspot.h"
 #include "components/icons/image24.h"
 #include "components/icons/library.h"
@@ -122,10 +120,6 @@ const uint8_t* iconForName(UIIcon icon, int size) {
         return Tasks80Icon;
       case UIIcon::Calendar:
         return Calendar80Icon;
-      case UIIcon::Budget:
-        return Budget80Icon;
-      case UIIcon::Habits:
-        return Habits80Icon;
       case UIIcon::Bell:
         return Bell80Icon;
       case UIIcon::Settings:
@@ -237,7 +231,7 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     // power session) rather than showing a stale or garbage value. Today's date
     // rides alongside it, middle-dot separated (same glyph and spacing
     // QuickPickActivity's own age/highscore status line used to use), in the
-    // same "Mon 17 Aug" format Tasks/Calendar/Budget/Habits already use for
+    // same "Mon 17 Aug" format Tasks/Calendar already use for
     // their own header date (organizer::formatDayLabel) -- silently dropped
     // along with the time when the clock isn't usable yet, same as the time
     // itself. UI_10_FONT_ID and the clock icon match QuickPickActivity's own

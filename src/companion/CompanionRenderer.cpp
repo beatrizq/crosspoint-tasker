@@ -234,18 +234,18 @@ const char* idleBubbleText(const Mood mood, const uint8_t variant) {
         default:
           return tr(STR_COMPANION_IDLE_NEGLECTED_5);
       }
-    case Mood::Milestone:
+    case Mood::Amazed:
       switch (v) {
         case 0:
-          return tr(STR_COMPANION_IDLE_MILESTONE_1);
+          return tr(STR_COMPANION_IDLE_AMAZED_1);
         case 1:
-          return tr(STR_COMPANION_IDLE_MILESTONE_2);
+          return tr(STR_COMPANION_IDLE_AMAZED_2);
         case 2:
-          return tr(STR_COMPANION_IDLE_MILESTONE_3);
+          return tr(STR_COMPANION_IDLE_AMAZED_3);
         case 3:
-          return tr(STR_COMPANION_IDLE_MILESTONE_4);
+          return tr(STR_COMPANION_IDLE_AMAZED_4);
         default:
-          return tr(STR_COMPANION_IDLE_MILESTONE_5);
+          return tr(STR_COMPANION_IDLE_AMAZED_5);
       }
     case Mood::Sleeping:
       return tr(STR_COMPANION_IDLE_SATISFIED_1);

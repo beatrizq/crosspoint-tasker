@@ -3,7 +3,20 @@
 #include <I18n.h>
 #include <TodoistTaskCache.h>
 
+#include "CrossPointState.h"
+
 namespace taskTabModel {
+
+uint8_t activeFilterBit() {
+  return APP_STATE.todoistActiveFilter == 0 ? TodoistTask::FILTER_1_BIT : TodoistTask::FILTER_2_BIT;
+}
+
+void setActiveFilter(const uint8_t filterIndex) {
+  const uint8_t clamped = filterIndex == 0 ? 0 : 1;
+  if (APP_STATE.todoistActiveFilter == clamped) return;
+  APP_STATE.todoistActiveFilter = clamped;
+  APP_STATE.saveToFile();
+}
 
 bool matchesKind(const TaskTabKind kind, const size_t cacheIndex) {
   if (kind == TaskTabKind::LOGS) return false;
@@ -11,6 +24,7 @@ bool matchesKind(const TaskTabKind kind, const size_t cacheIndex) {
   const auto& tasks = TODOIST_TASKS.getTasks();
   if (cacheIndex >= tasks.size()) return false;
   const TodoistTask& task = tasks[cacheIndex];
+  if ((task.filterMask & activeFilterBit()) == 0) return false;
 
   // Today, as the last sync settled it. DUE_NONE when nothing has synced or
   // the date could not be established, which is why the three dated kinds
@@ -71,6 +85,15 @@ int logEntryIndexForRow(const int row) {
 }
 
 bool rowsHaveSubtitle(const TaskTabKind kind) { return kind == TaskTabKind::UPCOMING || kind == TaskTabKind::LOGS; }
+
+bool anyRowHasLabel(const TaskTabKind kind) {
+  if (kind == TaskTabKind::LOGS) return false;
+  const auto& tasks = TODOIST_TASKS.getTasks();
+  for (size_t i = 0; i < tasks.size(); i++) {
+    if (!tasks[i].labels.empty() && matchesKind(kind, i)) return true;
+  }
+  return false;
+}
 
 int rebuildVisibleTabs(const TaskTabKind wanted, std::vector<TaskTabKind>& visibleTabs) {
   visibleTabs.clear();

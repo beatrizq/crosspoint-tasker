@@ -14,8 +14,7 @@
  * LOGS is new here relative to TasksActivity's original tab set: today's
  * completed tasks (TodoistTaskCache::getCompletedTodayEntries(), a distinct
  * vector from the live task list, not a filter over it) -- absorbed from the
- * old standalone Logs screen, which combined this with Habits' own
- * completions; HabitsActivity's own Logs tab is the habit half.
+ * old standalone Logs screen.
  */
 namespace taskTabModel {
 
@@ -25,8 +24,18 @@ namespace taskTabModel {
 // own convention.
 enum class TaskTabKind : uint8_t { OVERDUE, TODAY, UPCOMING, NO_DATE, LOGS };
 
+// The TodoistTask::filterMask bit the lists currently show: the Companion's
+// side buttons pick Filter 1 or Filter 2 (APP_STATE.todoistActiveFilter), and
+// both filters split into the same tabs. Every function below that walks the
+// live tasks skips the ones the active filter did not match.
+uint8_t activeFilterBit();
+
+// Switches the active filter (0 = Filter 1, 1 = Filter 2) and persists it.
+// A no-op, without a write, when it is already active.
+void setActiveFilter(uint8_t filterIndex);
+
 // Whether the live task at `cacheIndex` (TODOIST_TASKS.getTasks()) belongs to
-// `kind`. Always false for LOGS -- a log row is never a live-task cache row;
+// `kind`, within the active filter. Always false for LOGS -- a log row is never a live-task cache row;
 // see logEntryIndexForRow() for how a Logs row is actually resolved.
 bool matchesKind(TaskTabKind kind, size_t cacheIndex);
 
@@ -50,6 +59,11 @@ int logEntryIndexForRow(int row);
 // (OVERDUE and TODAY are already a date range, and NO_DATE has none), or the
 // Cached/Synced tag for LOGS.
 bool rowsHaveSubtitle(TaskTabKind kind);
+
+// Whether any live task under `kind` (within the active filter) has a label --
+// the Companion draws a subtitle line on a tab that has one, so the rows keep
+// one even height. Always false for LOGS.
+bool anyRowHasLabel(TaskTabKind kind);
 
 // Recomputes which tabs currently have rows into `visibleTabs` (LOGS always
 // shows; OVERDUE/TODAY/UPCOMING/NO_DATE only when countFor() > 0), keeping
