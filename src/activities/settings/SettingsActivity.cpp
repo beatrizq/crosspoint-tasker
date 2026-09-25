@@ -37,13 +37,14 @@
 #include "network/BleNotifyRelay.h"
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
-                                                              StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM,
-                                                              StrId::STR_CAT_ORGANIZER};
+                                                              StrId::STR_CAT_LIBRARY, StrId::STR_CAT_CONTROLS,
+                                                              StrId::STR_CAT_SYSTEM,  StrId::STR_CAT_ORGANIZER};
 
 void SettingsActivity::rebuildSettingsLists() {
   displaySettings.clear();
   readerSettings.clear();
   controlsSettings.clear();
+  librarySettings.clear();
   systemSettings.clear();
   organizerSettings.clear();
 
@@ -71,6 +72,8 @@ void SettingsActivity::rebuildSettingsLists() {
         continue;
       }
       controlsSettings.push_back(setting);
+    } else if (setting.category == StrId::STR_CAT_LIBRARY) {
+      librarySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_ORGANIZER) {
@@ -84,8 +87,9 @@ void SettingsActivity::rebuildSettingsLists() {
                             SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
+  // Where books come from and how reading progress follows them around.
+  librarySettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
+  librarySettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   // App Order leads the individual apps, as asked: it is a property of the
   // set of apps rather than of any one of them, so it comes first rather
   // than trailing after it.
@@ -93,7 +97,6 @@ void SettingsActivity::rebuildSettingsLists() {
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_TODOIST, SettingAction::Todoist));
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_CALENDAR, SettingAction::GoogleCalendar));
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_COMPANION, SettingAction::Companion));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   // TODO: Touch devices need their own firmware update path/artifacts before OTA is exposed.
   if (!BoardConfig::hasTouch()) {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
@@ -105,6 +108,14 @@ void SettingsActivity::rebuildSettingsLists() {
                         SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
+  // Clear Reading Cache sits just ahead of Hide Battery %, so the Reader tab ends
+  // with the cache action and then the two status-bar entries.
+  {
+    const auto hideBattery = std::find_if(readerSettings.begin(), readerSettings.end(), [](const SettingInfo& info) {
+      return info.valuePtr == &CrossPointSettings::hideBatteryPercentage;
+    });
+    readerSettings.insert(hideBattery, SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+  }
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
   // Not reader-specific (see clockFormat's own comment in SettingsList.h), so
   // the offset editor and manual sync live in Display rather than nested under
@@ -128,12 +139,15 @@ void SettingsActivity::applyCategorySelection() {
       currentSettings = &readerSettings;
       break;
     case 2:
-      currentSettings = &controlsSettings;
+      currentSettings = &librarySettings;
       break;
     case 3:
-      currentSettings = &systemSettings;
+      currentSettings = &controlsSettings;
       break;
     case 4:
+      currentSettings = &systemSettings;
+      break;
+    case 5:
       currentSettings = &organizerSettings;
       break;
     default:

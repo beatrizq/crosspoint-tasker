@@ -172,6 +172,7 @@ class SettingsActivity final : public Activity {
   // Per-category settings derived from shared list + device-only actions
   std::vector<SettingInfo> displaySettings;
   std::vector<SettingInfo> readerSettings;
+  std::vector<SettingInfo> librarySettings;
   std::vector<SettingInfo> controlsSettings;
   std::vector<SettingInfo> systemSettings;
   std::vector<SettingInfo> organizerSettings;
@@ -185,7 +186,7 @@ class SettingsActivity final : public Activity {
 
   OptionPopup optionPopup;
 
-  static constexpr int categoryCount = 5;
+  static constexpr int categoryCount = 6;
   static const StrId categoryNames[categoryCount];
 
   void enterCategory(int categoryIndex);
