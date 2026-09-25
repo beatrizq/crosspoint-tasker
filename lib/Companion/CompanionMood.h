@@ -14,8 +14,8 @@ namespace companion {
 // (see src/companion/sprites/pancake.grid for their art) are overrides too.
 // Focus is drawn directly by FocusSessionActivity for the whole of a focus
 // session, never via CompanionTracker::currentMood(). Break is what
-// currentMood() returns while the synced task list is empty -- everything
-// done, nothing left to do -- behind Sleeping only. Amazed, by contrast, IS a
+// currentMood() returns once a sync has left no overdue or due-today task in
+// either Todoist filter -- everything urgent done -- behind Sleeping only. Amazed, by contrast, IS a
 // ladder outcome: the top tier, above Happy (see MoodThresholds::amazedPoints).
 enum class Mood : uint8_t {
   Happy = 0,

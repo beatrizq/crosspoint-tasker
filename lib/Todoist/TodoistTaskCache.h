@@ -24,6 +24,10 @@ struct TodoistCompletedLogEntry {
   std::string title;
   std::string taskId;
   bool pending = false;
+  // Which filter(s) the task belonged to when it was completed, the same bits as
+  // TodoistTask::filterMask -- the Logs tab shows only the active filter's. An
+  // entry from before there were two filters counts for both.
+  uint8_t filterMask = TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT;
 };
 
 /**
@@ -129,9 +133,12 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   // that lands in setCompletedToday() is authoritative and replaces both
   // together, so entries can briefly outrun/undershoot the count between a
   // local press and the next sync the same way completedToday itself can be
-  // stale (see its own comment). Capped at MAX_COMPLETED_TODAY_TITLES.
+  // stale (see its own comment). Capped at MAX_COMPLETED_STORED.
   const std::vector<TodoistCompletedLogEntry>& getCompletedTodayEntries() const { return completedTodayEntries; }
-  static constexpr size_t MAX_COMPLETED_TODAY_TITLES = 20;
+  // Entries kept per filter, and in total: two filters' logs are stored side by
+  // side, so the cache holds twice one filter's worth.
+  static constexpr size_t MAX_COMPLETED_TODAY_TITLES = 40;
+  static constexpr size_t MAX_COMPLETED_STORED = MAX_COMPLETED_TODAY_TITLES * 2;
 
   // Sets today's completed count and titles directly, from a fetch that
   // already reflects the whole day: this device's own presses once pushed,
@@ -139,11 +146,10 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   // than adds - the fetch is authoritative for the day, not incremental - and
   // marks completedDay resolved so a completion pressed on-device later the
   // same day still adds on top of this baseline instead of rolling over
-  // first. titles is moved from and truncated to MAX_COMPLETED_TODAY_TITLES;
-  // every resulting entry is Synced (pending=false, taskId="") -- a fetch is
-  // by definition already confirmed by the server, with no push left to
-  // cancel.
-  void setCompletedToday(uint16_t count, const std::string& date, std::vector<std::string>&& titles);
+  // first. entries is moved from and truncated to MAX_COMPLETED_STORED; every
+  // one is Synced (pending=false) -- a fetch is by definition already confirmed
+  // by the server, with no push left to cancel.
+  void setCompletedToday(uint16_t count, const std::string& date, std::vector<TodoistCompletedLogEntry>&& entries);
 
   // Cancels one Cached (not yet pushed) Logs-screen row: removes it from
   // completedTodayEntries, decrements completedToday, and cancels its queued

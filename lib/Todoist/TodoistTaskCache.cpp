@@ -42,6 +42,7 @@ void TodoistTaskCache::toJson(JsonDocument& doc) const {
     obj["title"] = entry.title;
     if (!entry.taskId.empty()) obj["taskId"] = entry.taskId;
     if (entry.pending) obj["pending"] = true;
+    if (entry.filterMask != (TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT)) obj["filters"] = entry.filterMask;
   }
 }
 
@@ -55,7 +56,7 @@ bool TodoistTaskCache::fromJson(JsonVariantConst doc) {
   completedTodayEntries.clear();
   JsonArrayConst entriesArr = doc["completedTodayEntries"];
   if (!entriesArr.isNull()) {
-    const size_t entryCount = std::min(entriesArr.size(), MAX_COMPLETED_TODAY_TITLES);
+    const size_t entryCount = std::min(entriesArr.size(), MAX_COMPLETED_STORED);
     completedTodayEntries.reserve(entryCount);
     for (size_t i = 0; i < entryCount; i++) {
       const char* title = entriesArr[i]["title"] | "";
@@ -64,6 +65,11 @@ bool TodoistTaskCache::fromJson(JsonVariantConst doc) {
       entry.title = title;
       entry.taskId = entriesArr[i]["taskId"] | "";
       entry.pending = entriesArr[i]["pending"] | false;
+      entry.filterMask =
+          entriesArr[i]["filters"] | static_cast<uint8_t>(TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT);
+      if ((entry.filterMask & (TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT)) == 0) {
+        entry.filterMask = TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT;
+      }
       completedTodayEntries.push_back(std::move(entry));
     }
   } else {
@@ -72,7 +78,7 @@ bool TodoistTaskCache::fromJson(JsonVariantConst doc) {
     // this feature existed was never tracked with a cancellable push anyway.
     JsonArrayConst titlesArr = doc["completedTodayTitles"];
     if (!titlesArr.isNull()) {
-      const size_t titleCount = std::min(titlesArr.size(), MAX_COMPLETED_TODAY_TITLES);
+      const size_t titleCount = std::min(titlesArr.size(), MAX_COMPLETED_STORED);
       completedTodayEntries.reserve(titleCount);
       for (size_t i = 0; i < titleCount; i++) {
         const char* title = titlesArr[i] | "";
@@ -181,26 +187,22 @@ void TodoistTaskCache::completeTaskAt(const size_t index) {
   // since this is a local, not-yet-pushed completion. The next sync's
   // setCompletedToday() replaces this with the server's authoritative list,
   // same as it does for the count.
-  if (completedTodayEntries.size() < MAX_COMPLETED_TODAY_TITLES) {
-    completedTodayEntries.push_back({tasks[index].content, tasks[index].id, /*pending=*/true});
+  if (completedTodayEntries.size() < MAX_COMPLETED_STORED) {
+    completedTodayEntries.push_back({tasks[index].content, tasks[index].id, /*pending=*/true, tasks[index].filterMask});
   }
 
   tasks.erase(tasks.begin() + static_cast<long>(index));
 }
 
 void TodoistTaskCache::setCompletedToday(const uint16_t count, const std::string& date,
-                                         std::vector<std::string>&& titles) {
+                                         std::vector<TodoistCompletedLogEntry>&& entries) {
   if (!date.empty()) syncDate = date;
   completedToday = count;
   completedDay = todoist::dueDaysFromIso(syncDate.c_str());
-  // A fetch is authoritative -- every resulting row is Synced (pending=false,
-  // taskId="" since there is no push left to cancel).
-  completedTodayEntries.clear();
-  completedTodayEntries.reserve(std::min(titles.size(), MAX_COMPLETED_TODAY_TITLES));
-  for (auto& title : titles) {
-    if (completedTodayEntries.size() >= MAX_COMPLETED_TODAY_TITLES) break;
-    completedTodayEntries.push_back({std::move(title), "", false});
-  }
+  // A fetch is authoritative -- every resulting row is Synced (pending=false).
+  completedTodayEntries = std::move(entries);
+  if (completedTodayEntries.size() > MAX_COMPLETED_STORED) completedTodayEntries.resize(MAX_COMPLETED_STORED);
+  for (auto& entry : completedTodayEntries) entry.pending = false;
 }
 
 bool TodoistTaskCache::cancelCompletedLogEntry(const size_t displayIndex) {

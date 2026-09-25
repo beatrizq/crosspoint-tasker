@@ -4,6 +4,7 @@
 #include <GCalEventCache.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <TodoistStore.h>
 #include <TodoistTaskCache.h>
 #include <esp_random.h>
 
@@ -720,34 +721,78 @@ void QuickPickActivity::renderTasksTab(const int top, const int height) const {
     return;
   }
 
-  // Title, plus a dimmed second line only where TaskTabModel::rowsHaveSubtitle()
-  // says so (the due date on Upcoming, the Cached/Synced tag on Logs) -- the
-  // same rows the real Tasks screen draws, following SETTINGS.organizerFontSize.
+  // Title, plus a dimmed second line where a row has something to say there: its
+  // label and, on Upcoming, its due date (Logs' rows always carry the Cached/
+  // Synced tag). A row with neither is a single, thinner line -- so rows are not
+  // all the same height, and pages are packed by height rather than by count.
   const int titleFont = taskRowTitleFontId();
   const int subtitleFont = taskRowSubtitleFontId();
-  // A subtitle line where the tab shows due dates (Upcoming) or Logs' tag, or
-  // wherever any row carries a label -- every row then keeps that line, empty
-  // or not, so the list stays even.
-  const bool hasSubtitle = taskTabModel::rowsHaveSubtitle(activeKind) || taskTabModel::anyRowHasLabel(activeKind);
   const int rowPad = std::max(6, renderer.getLineHeight(titleFont) * 2 / 5);
-  const int rowHeight = hasSubtitle ? renderer.getLineHeight(titleFont) + renderer.getLineHeight(subtitleFont) + rowPad
-                                    : renderer.getLineHeight(titleFont) + rowPad;
-  const int pageItems = std::max(1, height / rowHeight);
-  const int pageStart = (taskSelectedRow / pageItems) * pageItems;
+  const int oneLineHeight = renderer.getLineHeight(titleFont) + rowPad;
+  const int twoLineHeight = oneLineHeight + renderer.getLineHeight(subtitleFont);
+  const bool onLogs = activeKind == taskTabModel::TaskTabKind::LOGS;
+  const bool showsDates = taskTabModel::rowsHaveSubtitle(activeKind) && !onLogs;
 
-  for (int row = 0; row < pageItems; row++) {
-    const int i = pageStart + row;
-    if (i >= totalRows) break;
-    const int rowY = top + row * rowHeight;
+  // Which rows are two lines, one bit per row (at most TODOIST_MAX_CACHED_TASKS
+  // rows on any tab), found in one pass over the tasks rather than a per-row
+  // lookup -- 15 bytes of stack, no allocation.
+  uint32_t twoLineBits[(TODOIST_MAX_CACHED_TASKS + 31) / 32] = {};
+  const auto setTwoLine = [&twoLineBits](const int r) { twoLineBits[r / 32] |= 1u << (r % 32); };
+  const auto isTwoLine = [&twoLineBits](const int r) { return (twoLineBits[r / 32] >> (r % 32) & 1u) != 0; };
+  if (onLogs) {
+    for (int r = 0; r < totalRows && r < static_cast<int>(TODOIST_MAX_CACHED_TASKS); r++) setTwoLine(r);
+  } else {
+    const auto& tasks = TODOIST_TASKS.getTasks();
+    int r = 0;
+    for (size_t t = 0; t < tasks.size() && r < static_cast<int>(TODOIST_MAX_CACHED_TASKS); t++) {
+      if (!taskTabModel::matchesKind(activeKind, t)) continue;
+      if (!tasks[t].labels.empty() || (showsDates && tasks[t].dueDays != todoist::DUE_NONE)) setTwoLine(r);
+      r++;
+    }
+  }
+  const auto heightOf = [&](const int r) { return isTwoLine(r) ? twoLineHeight : oneLineHeight; };
+
+  // The page holding the selected row: rows are packed top to bottom until the
+  // next would not fit, then a new page starts, the same from any starting
+  // point so a page never shifts as the selection moves within it.
+  int pageStart = 0;
+  int pageEnd = totalRows;
+  {
+    int start = 0;
+    int used = 0;
+    bool found = false;
+    for (int r = 0; r < totalRows; r++) {
+      const int h = heightOf(r);
+      if (used + h > height && r > start) {
+        if (taskSelectedRow < r) {
+          pageStart = start;
+          pageEnd = r;
+          found = true;
+          break;
+        }
+        start = r;
+        used = 0;
+      }
+      used += h;
+    }
+    if (!found) pageStart = start;
+  }
+
+  int rowY = top;
+  for (int i = pageStart; i < pageEnd; i++) {
+    const int rowHeight = heightOf(i);
     const bool selected = rowsFocused && i == taskSelectedRow;
     const bool ink = !selected;
 
     if (selected) renderer.fillRect(0, rowY, pageWidth, rowHeight);
 
     const int textY = rowY + rowPad / 2;
-    if (activeKind == taskTabModel::TaskTabKind::LOGS) {
+    if (onLogs) {
       const int entryIndex = taskTabModel::logEntryIndexForRow(i);
-      if (entryIndex < 0) continue;
+      if (entryIndex < 0) {
+        rowY += rowHeight;
+        continue;
+      }
       const auto& entry = TODOIST_TASKS.getCompletedTodayEntries()[static_cast<size_t>(entryIndex)];
       const auto shown = renderer.truncatedText(titleFont, entry.title.c_str(), textWidth);
       renderer.drawText(titleFont, textX, textY, shown.c_str(), ink);
@@ -757,17 +802,18 @@ void QuickPickActivity::renderTasksTab(const int top, const int height) const {
       dimText(renderer, textX, subY, subtitleFont, tag, ink);
     } else {
       const int cacheIndex = taskTabModel::taskCacheIndexForRow(activeKind, i);
-      if (cacheIndex < 0) continue;
+      if (cacheIndex < 0) {
+        rowY += rowHeight;
+        continue;
+      }
       const auto& task = TODOIST_TASKS.getTasks()[static_cast<size_t>(cacheIndex)];
       const auto shown = renderer.truncatedText(titleFont, task.content.c_str(), textWidth);
       renderer.drawText(titleFont, textX, textY, shown.c_str(), ink);
       // The due date (only on tabs that show it) and the label, joined with a
-      // middle dot when both are there. Undated, unlabelled tasks draw nothing
-      // rather than "--": the row keeps its height, so the list stays even, and
-      // an empty line says "nothing to add" more quietly than a dash -- same
-      // reasoning TasksActivity's own drawRow() uses.
-      if (hasSubtitle) {
-        const bool showDate = taskTabModel::rowsHaveSubtitle(activeKind) && task.dueDays != todoist::DUE_NONE;
+      // middle dot when both are there. A row with neither is one line and draws
+      // no subtitle at all.
+      if (isTwoLine(i)) {
+        const bool showDate = showsDates && task.dueDays != todoist::DUE_NONE;
         char when[16] = "";
         if (showDate) organizer::formatDayLabel(task.dueDays, when, sizeof(when));
         char subtitle[TodoistTask::LABELS_MAX_LEN + 32];
@@ -778,20 +824,19 @@ void QuickPickActivity::renderTasksTab(const int top, const int height) const {
         } else {
           snprintf(subtitle, sizeof(subtitle), "%s", task.labels.c_str());
         }
-        if (subtitle[0] != '\0') {
-          const auto shownSubtitle = renderer.truncatedText(subtitleFont, subtitle, textWidth);
-          const int subtitleY = textY + renderer.getLineHeight(titleFont);
-          renderer.drawText(subtitleFont, textX, subtitleY, shownSubtitle.c_str(), ink);
-          dimText(renderer, textX, subtitleY, subtitleFont, shownSubtitle.c_str(), ink);
-        }
+        const auto shownSubtitle = renderer.truncatedText(subtitleFont, subtitle, textWidth);
+        const int subtitleY = textY + renderer.getLineHeight(titleFont);
+        renderer.drawText(subtitleFont, textX, subtitleY, shownSubtitle.c_str(), ink);
+        dimText(renderer, textX, subtitleY, subtitleFont, shownSubtitle.c_str(), ink);
       }
     }
 
-    const bool lastOnPage = row + 1 >= pageItems || i + 1 >= totalRows;
+    const bool lastOnPage = i + 1 >= pageEnd;
     if (!selected && !lastOnPage) {
       renderer.fillRectDither(textX, rowY + rowHeight - SEPARATOR_HEIGHT, textWidth, SEPARATOR_HEIGHT,
                               Color::LightGray);
     }
+    rowY += rowHeight;
   }
 }
 
@@ -1046,8 +1091,11 @@ void QuickPickActivity::render(RenderLock&&) {
   // Straight from the sprite to the embedded Tasks section below -- no mood
   // label in between any more (removed entirely, freeing this space for the
   // section to sit higher).
-  const char* const filter1Label = tr(STR_COMPANION_SIDE_FILTER_1);
-  const char* const filter2Label = tr(STR_COMPANION_SIDE_FILTER_2);
+  // The filters' own names, or Filter1/Filter2 until they are named.
+  const std::string& filter1Name = TODOIST_STORE.getFilterName(0);
+  const std::string& filter2Name = TODOIST_STORE.getFilterName(1);
+  const char* const filter1Label = filter1Name.empty() ? tr(STR_COMPANION_SIDE_FILTER_1) : filter1Name.c_str();
+  const char* const filter2Label = filter2Name.empty() ? tr(STR_COMPANION_SIDE_FILTER_2) : filter2Name.c_str();
   const int sideButtonsBottom = GUI.getSideButtonHintsBottom(renderer, filter1Label, filter2Label);
   const int sectionTopNatural = spriteTop + spriteH + LABEL_GAP;
   // 0 means there is no shared line to sit below (see getSideButtonHintsBottom()),
@@ -1143,7 +1191,7 @@ void QuickPickActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, leftLabel, rightLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  // Side button labels (Up = "F1", Down = "F2") -- which Todoist filter the
+  // Side button labels (Up = Filter 1's name, Down = Filter 2's) -- which Todoist filter the
   // section below the companion shows (see loop()'s own comment above and
   // switchFilter()). The one showing is drawn inverted.
   GUI.drawSideButtonHints(renderer, filter1Label, filter2Label,

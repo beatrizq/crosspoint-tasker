@@ -128,13 +128,14 @@ companion::Mood CompanionTracker::currentMood() const {
   // does so whatever it has earned today.
   if (isWithinSleepWindow()) return companion::Mood::Sleeping;
 
-  // Nothing left to do: a task list that has been synced and is now empty
-  // means everything the user's filter matched has been done, so the
-  // companion takes a break. Requires a sync to have happened -- an empty
-  // cache on a device that never synced is "no data yet", not "all done".
-  // Checked ahead of the ladder on purpose: while the list stays empty this is
-  // the mood, however many tasks were done today.
-  if (TODOIST_TASKS.hasSynced() && TODOIST_TASKS.getTasks().empty()) return companion::Mood::Break;
+  // Nothing left to do: after a sync, no task that is overdue or due today, in
+  // either Todoist filter (the cache holds both filters' tasks, so this is the
+  // union), means everything urgent has been done and the companion takes a
+  // break. Undated and upcoming tasks do not count against it. Requires a sync
+  // to have happened -- an empty cache on a device that never synced is "no
+  // data yet", not "all done". Checked ahead of the ladder on purpose: while
+  // this holds it is the mood, however many tasks were done today.
+  if (TODOIST_TASKS.hasSynced() && TODOIST_TASKS.getDueTodayOrOverdueCount() == 0) return companion::Mood::Break;
 
   const auto thresholds = thresholdsFromSettings();
   return companion::evaluate(buildMoodInput(thresholds), thresholds);

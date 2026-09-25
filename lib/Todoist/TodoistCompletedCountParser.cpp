@@ -15,7 +15,7 @@ bool keyIs(const char* key, const size_t len, const char* expected, const size_t
 }
 }  // namespace
 
-TodoistCompletedCountParser::TodoistCompletedCountParser(const TitleSink sink, void* sinkCtx)
+TodoistCompletedCountParser::TodoistCompletedCountParser(const ItemSink sink, void* sinkCtx)
     : parser(JsonCallbacks{this, sOnKey, sOnString, sOnNumber, sOnBool, sOnNull, sOnObjectStart, sOnObjectEnd,
                            sOnArrayStart, sOnArrayEnd}),
       sink(sink),
@@ -31,6 +31,7 @@ void TodoistCompletedCountParser::reset() {
   itemDepth = 0;
   itemCount = 0;
   currentContent[0] = '\0';
+  currentId[0] = '\0';
 }
 
 void TodoistCompletedCountParser::feed(const char* data, const size_t len) { parser.feed(data, len); }
@@ -42,6 +43,8 @@ void TodoistCompletedCountParser::sOnKey(void* ctx, const char* key, const size_
     self->lastKey = LastKey::ITEMS;
   } else if (self->position == Position::IN_ITEM_OBJECT && self->itemDepth == 1 && keyIs(key, len, "content", 7)) {
     self->lastKey = LastKey::CONTENT;
+  } else if (self->position == Position::IN_ITEM_OBJECT && self->itemDepth == 1 && keyIs(key, len, "id", 2)) {
+    self->lastKey = LastKey::ID;
   } else {
     self->lastKey = LastKey::NONE;
   }
@@ -51,6 +54,8 @@ void TodoistCompletedCountParser::sOnString(void* ctx, const char* value, const 
   auto* self = static_cast<TodoistCompletedCountParser*>(ctx);
   if (self->position == Position::IN_ITEM_OBJECT && self->lastKey == LastKey::CONTENT) {
     safeCopy(self->currentContent, sizeof(self->currentContent), value, len);
+  } else if (self->position == Position::IN_ITEM_OBJECT && self->lastKey == LastKey::ID) {
+    safeCopy(self->currentId, sizeof(self->currentId), value, len);
   }
   self->lastKey = LastKey::NONE;
 }
@@ -78,6 +83,7 @@ void TodoistCompletedCountParser::sOnObjectStart(void* ctx) {
       self->position = Position::IN_ITEM_OBJECT;
       self->itemDepth = 1;
       self->currentContent[0] = '\0';
+      self->currentId[0] = '\0';
       break;
     case Position::IN_ITEM_OBJECT:
       self->itemDepth++;
@@ -97,8 +103,11 @@ void TodoistCompletedCountParser::sOnObjectEnd(void* ctx) {
       self->itemDepth--;
       if (self->itemDepth == 0) {
         self->itemCount++;
-        if (self->sink && self->currentContent[0] != '\0') self->sink(self->sinkCtx, self->currentContent);
+        if (self->sink && self->currentContent[0] != '\0') {
+          self->sink(self->sinkCtx, self->currentId, self->currentContent);
+        }
         self->currentContent[0] = '\0';
+        self->currentId[0] = '\0';
         self->position = Position::IN_ITEMS_ARRAY;
       }
       break;

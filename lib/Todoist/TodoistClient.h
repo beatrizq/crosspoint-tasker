@@ -121,16 +121,16 @@ class TodoistClient {
    * the user's own timezone can land on the wrong side of it.
    *
    * @param outCount Output: 0 on any error.
-   * @param titleSink Optional: invoked once per completed item (with its
+   * @param itemSink Optional: invoked once per completed item (with its id and
    * title) as the response streams in, for a caller that wants the actual
-   * list rather than just outCount. See TodoistCompletedCountParser::TitleSink.
+   * list rather than just outCount. See TodoistCompletedCountParser::ItemSink.
    *
    * `http`: caller-owned connection -- see fetchTasks()'s own parameter doc.
    */
   static Error fetchCompletedCountForDay(freeink::SecureHttpClient& http, const std::string& filter,
                                          const std::string& isoDate, uint16_t& outCount,
-                                         TodoistCompletedCountParser::TitleSink titleSink = nullptr,
-                                         void* titleSinkCtx = nullptr);
+                                         TodoistCompletedCountParser::ItemSink itemSink = nullptr,
+                                         void* itemSinkCtx = nullptr);
 
   /** Diagnostic message for logs. User-facing text is translated by the caller. */
   static const char* errorString(Error error);

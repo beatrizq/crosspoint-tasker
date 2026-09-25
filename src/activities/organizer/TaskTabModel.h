@@ -39,8 +39,9 @@ void setActiveFilter(uint8_t filterIndex);
 // see logEntryIndexForRow() for how a Logs row is actually resolved.
 bool matchesKind(TaskTabKind kind, size_t cacheIndex);
 
-// Row count for `kind`: a scan over the live tasks for the five real kinds,
-// or TODOIST_TASKS.getCompletedTodayEntries().size() for LOGS.
+// Row count for `kind`, within the active filter: a scan over the live tasks
+// for the four real kinds, or the completed-today entries the active filter
+// shows for LOGS.
 int countFor(TaskTabKind kind);
 
 // The live-task cache index behind visible row `row` under one of the five
@@ -51,7 +52,8 @@ int countFor(TaskTabKind kind);
 int taskCacheIndexForRow(TaskTabKind kind, int row);
 
 // The index into TODOIST_TASKS.getCompletedTodayEntries() behind visible Log
-// row `row`, or -1 out of range. Meaningful only under LOGS.
+// row `row` (among the entries the active filter shows), or -1 out of range.
+// Meaningful only under LOGS.
 int logEntryIndexForRow(int row);
 
 // Whether a row under `kind` draws a second, dimmed line -- the due date on
@@ -59,11 +61,6 @@ int logEntryIndexForRow(int row);
 // (OVERDUE and TODAY are already a date range, and NO_DATE has none), or the
 // Cached/Synced tag for LOGS.
 bool rowsHaveSubtitle(TaskTabKind kind);
-
-// Whether any live task under `kind` (within the active filter) has a label --
-// the Companion draws a subtitle line on a tab that has one, so the rows keep
-// one even height. Always false for LOGS.
-bool anyRowHasLabel(TaskTabKind kind);
 
 // Recomputes which tabs currently have rows into `visibleTabs` (LOGS always
 // shows; OVERDUE/TODAY/UPCOMING/NO_DATE only when countFor() > 0), keeping

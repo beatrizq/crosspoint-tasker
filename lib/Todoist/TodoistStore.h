@@ -32,6 +32,10 @@ class TodoistStore : public PersistableStore<TodoistStore> {
   // cached alongside the first (see TodoistTask::filterMask), so switching
   // between them never needs a sync.
   std::string filter2 = DEFAULT_FILTER;
+  // Optional names for the two filters, shown on the Companion's side buttons in
+  // place of "F1"/"F2". Empty means unnamed.
+  std::string filterName;
+  std::string filterName2;
 
   TodoistStore() = default;
   ~TodoistStore() = default;
@@ -46,6 +50,11 @@ class TodoistStore : public PersistableStore<TodoistStore> {
   // Todoist caps a filter query at 1,024 characters, so anything longer would be
   // rejected by the API anyway.
   static constexpr size_t MAX_FILTER_LEN = 1024;
+
+  // A filter's name is stacked one character per line on a side button, so it is
+  // capped in characters (not bytes) to keep that label from growing past what the
+  // screen has room for.
+  static constexpr size_t MAX_FILTER_NAME_CHARS = 8;
 
   static const char* getFilePath() { return "/.crosspoint/todoist.json"; }
   void toJson(JsonDocument& doc) const;
@@ -65,10 +74,9 @@ class TodoistStore : public PersistableStore<TodoistStore> {
   // once and every task carries both bits.
   bool filtersMatch() const { return filter == filter2; }
 
-  // One query that matches whatever either filter matches, for the
-  // completed-tasks record (which is not split per filter). Just Filter 1 when
-  // both are the same, or when combining them would exceed Todoist's length cap.
-  std::string getCombinedFilter() const;
+  // The name of filter `index` (0 = Filter 1, 1 = Filter 2), "" when unnamed.
+  const std::string& getFilterName(uint8_t index) const { return index == 0 ? filterName : filterName2; }
+  void setFilterName(uint8_t index, const std::string& value);
 };
 
 #define TODOIST_STORE TodoistStore::getInstance()

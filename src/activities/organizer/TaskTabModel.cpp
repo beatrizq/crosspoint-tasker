@@ -57,7 +57,13 @@ bool matchesKind(const TaskTabKind kind, const size_t cacheIndex) {
 }
 
 int countFor(const TaskTabKind kind) {
-  if (kind == TaskTabKind::LOGS) return static_cast<int>(TODOIST_TASKS.getCompletedTodayEntries().size());
+  if (kind == TaskTabKind::LOGS) {
+    int logCount = 0;
+    for (const auto& entry : TODOIST_TASKS.getCompletedTodayEntries()) {
+      if ((entry.filterMask & activeFilterBit()) != 0) logCount++;
+    }
+    return logCount;
+  }
 
   const auto& tasks = TODOIST_TASKS.getTasks();
   int count = 0;
@@ -80,20 +86,19 @@ int taskCacheIndexForRow(const TaskTabKind kind, const int row) {
 }
 
 int logEntryIndexForRow(const int row) {
-  if (row < 0 || static_cast<size_t>(row) >= TODOIST_TASKS.getCompletedTodayEntries().size()) return -1;
-  return row;
+  if (row < 0) return -1;
+  // The row-th entry the active filter shows, as an index into the whole log.
+  const auto& entries = TODOIST_TASKS.getCompletedTodayEntries();
+  int seen = 0;
+  for (size_t i = 0; i < entries.size(); i++) {
+    if ((entries[i].filterMask & activeFilterBit()) == 0) continue;
+    if (seen == row) return static_cast<int>(i);
+    seen++;
+  }
+  return -1;
 }
 
 bool rowsHaveSubtitle(const TaskTabKind kind) { return kind == TaskTabKind::UPCOMING || kind == TaskTabKind::LOGS; }
-
-bool anyRowHasLabel(const TaskTabKind kind) {
-  if (kind == TaskTabKind::LOGS) return false;
-  const auto& tasks = TODOIST_TASKS.getTasks();
-  for (size_t i = 0; i < tasks.size(); i++) {
-    if (!tasks[i].labels.empty() && matchesKind(kind, i)) return true;
-  }
-  return false;
-}
 
 int rebuildVisibleTabs(const TaskTabKind wanted, std::vector<TaskTabKind>& visibleTabs) {
   visibleTabs.clear();

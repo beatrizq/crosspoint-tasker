@@ -18,10 +18,12 @@
 namespace {
 constexpr int ROW_NICKNAME = 0;
 constexpr int ROW_TOKEN = 1;
-constexpr int ROW_FILTER = 2;
-constexpr int ROW_FILTER2 = 3;
-constexpr int ROW_CLEAR = 4;
-constexpr int ROW_HINT = 5;
+constexpr int ROW_FILTER_NAME = 2;
+constexpr int ROW_FILTER = 3;
+constexpr int ROW_FILTER2_NAME = 4;
+constexpr int ROW_FILTER2 = 5;
+constexpr int ROW_CLEAR = 6;
+constexpr int ROW_HINT = 7;
 }  // namespace
 
 void TodoistSettingsActivity::onEnter() {
@@ -114,6 +116,20 @@ void TodoistSettingsActivity::handleSelection() {
     return;
   }
 
+  if (selectedIndex == ROW_FILTER_NAME || selectedIndex == ROW_FILTER2_NAME) {
+    const uint8_t which = selectedIndex == ROW_FILTER2_NAME ? 1 : 0;
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(
+                               renderer, mappedInput, tr(STR_TODOIST_ENTER_FILTER_NAME),
+                               TODOIST_STORE.getFilterName(which), TodoistStore::MAX_FILTER_NAME_CHARS),
+                           [this, which](const ActivityResult& result) {
+                             if (result.isCancelled) return;
+                             TODOIST_STORE.setFilterName(which, std::get<KeyboardResult>(result.data).text);
+                             TODOIST_STORE.saveToFile();
+                             requestUpdate();
+                           });
+    return;
+  }
+
   if (selectedIndex == ROW_FILTER || selectedIndex == ROW_FILTER2) {
     const bool second = selectedIndex == ROW_FILTER2;
     // Plain text, not a password: a filter is not a secret, and it is typed by
@@ -173,8 +189,12 @@ void TodoistSettingsActivity::render(RenderLock&&) {
             return std::string(I18n::getInstance().get(StrId::STR_NICKNAME));
           case ROW_TOKEN:
             return std::string(I18n::getInstance().get(StrId::STR_TODOIST_API_TOKEN));
+          case ROW_FILTER_NAME:
+            return std::string(I18n::getInstance().get(StrId::STR_TODOIST_FILTER_NAME)) + " 1";
           case ROW_FILTER:
             return std::string(I18n::getInstance().get(StrId::STR_TODOIST_FILTER)) + " 1";
+          case ROW_FILTER2_NAME:
+            return std::string(I18n::getInstance().get(StrId::STR_TODOIST_FILTER_NAME)) + " 2";
           case ROW_FILTER2:
             return std::string(I18n::getInstance().get(StrId::STR_TODOIST_FILTER)) + " 2";
           case ROW_CLEAR:
@@ -190,6 +210,10 @@ void TodoistSettingsActivity::render(RenderLock&&) {
         // Shown rather than masked, and in full: the theme truncates it to the
         // value column, which is the only hint that a long filter is longer than
         // it looks.
+        if (index == ROW_FILTER_NAME || index == ROW_FILTER2_NAME) {
+          const std::string& name = TODOIST_STORE.getFilterName(index == ROW_FILTER2_NAME ? 1 : 0);
+          return name.empty() ? std::string(I18n::getInstance().get(StrId::STR_NOT_SET)) : name;
+        }
         if (index == ROW_FILTER) return TODOIST_STORE.getFilter();
         if (index == ROW_FILTER2) return TODOIST_STORE.getFilter2();
         return std::string("");

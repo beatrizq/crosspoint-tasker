@@ -285,6 +285,13 @@ int BaseTheme::getSideButtonHintsBottom(const GfxRenderer& renderer, const char*
   if (gpio.hasTouch() || !gpio.deviceIsX3()) {
     return 0;
   }
+  // Neither button has a label, so neither box is drawn and there is no line to
+  // sit below.
+  const bool noTop = topBtn == nullptr || topBtn[0] == '\0';
+  const bool noBottom = bottomBtn == nullptr || bottomBtn[0] == '\0';
+  if (noTop && noBottom) {
+    return 0;
+  }
   const int tallest = std::max(sideButtonBoxHeight(renderer, topBtn), sideButtonBoxHeight(renderer, bottomBtn));
   const int top = x3ButtonCenterY - tallest / 2;
   return top + tallest;

@@ -37,13 +37,24 @@ constexpr int NTP_POLL_ATTEMPTS = 50;
 // ISO dates order correctly as plain strings, and "" loses to any real date.
 const std::string& laterDate(const std::string& a, const std::string& b) { return b > a ? b : a; }
 
-// TodoistCompletedCountParser::TitleSink for the completed-count fetch below:
-// collects titles as the response streams in, capped the same way the cache
-// itself caps them so a busy day never grows this past what setCompletedToday
-// would keep anyway.
-void collectCompletedTitle(void* ctx, const char* content) {
-  auto* titles = static_cast<std::vector<std::string>*>(ctx);
-  if (titles->size() < TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES) titles->emplace_back(content);
+// TodoistCompletedCountParser::ItemSink for the completed-tasks fetches below:
+// collects each item (tagged with the filter it came from) as the response
+// streams in, capped per filter the same way the cache caps its own entries so
+// a busy day never grows this past what setCompletedToday would keep anyway.
+struct CompletedCollector {
+  std::vector<TodoistCompletedLogEntry>* out;
+  uint8_t filterMask;
+};
+
+void collectCompletedItem(void* ctx, const char* id, const char* content) {
+  auto* collector = static_cast<CompletedCollector*>(ctx);
+  if (collector->out->size() >= TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES) return;
+  TodoistCompletedLogEntry entry;
+  entry.title = content;
+  entry.taskId = id;
+  entry.pending = false;
+  entry.filterMask = collector->filterMask;
+  collector->out->push_back(std::move(entry));
 }
 
 /**
@@ -245,21 +256,56 @@ const char* runTasks() {
   // it just leaves today's completed count and the companion's credit stale
   // until the next attempt.
   if (error == TodoistClient::OK && !today.empty()) {
+    // Each filter's completions are fetched separately and merged by task id, so
+    // the Logs tab can show the active filter's alone (TodoistCompletedLogEntry::
+    // filterMask). Same shape as the open-task merge above, and the same
+    // transient cost: up to two lists of MAX_COMPLETED_TODAY_TITLES entries
+    // (roughly 8 KB each) held at once. One fetch when both filters are the same
+    // query.
+    std::vector<TodoistCompletedLogEntry> completed;
+    completed.reserve(TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES);
+    const bool sameFilter = TODOIST_STORE.filtersMatch();
+    CompletedCollector first{&completed,
+                             static_cast<uint8_t>(sameFilter ? (TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT)
+                                                             : TodoistTask::FILTER_1_BIT)};
+    uint16_t ignoredCount = 0;
     resetTaskWatchdogIfSubscribed();
-    uint16_t completedCount = 0;
-    std::vector<std::string> completedTitles;
-    completedTitles.reserve(TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES);
-    const TodoistClient::Error countError = TodoistClient::fetchCompletedCountForDay(
-        http, TODOIST_STORE.getCombinedFilter(), today, completedCount, collectCompletedTitle, &completedTitles);
+    TodoistClient::Error countError = TodoistClient::fetchCompletedCountForDay(
+        http, TODOIST_STORE.getFilter(), today, ignoredCount, collectCompletedItem, &first);
     resetTaskWatchdogIfSubscribed();
+    if (countError == TodoistClient::OK && !sameFilter) {
+      std::vector<TodoistCompletedLogEntry> completed2;
+      completed2.reserve(TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES);
+      CompletedCollector second{&completed2, TodoistTask::FILTER_2_BIT};
+      countError = TodoistClient::fetchCompletedCountForDay(http, TODOIST_STORE.getFilter2(), today, ignoredCount,
+                                                            collectCompletedItem, &second);
+      resetTaskWatchdogIfSubscribed();
+      if (countError == TodoistClient::OK) {
+        completed.reserve(completed.size() + completed2.size());
+        for (auto& entry : completed2) {
+          auto existing =
+              std::find_if(completed.begin(), completed.end(), [&entry](const TodoistCompletedLogEntry& other) {
+                return !entry.taskId.empty() && other.taskId == entry.taskId;
+              });
+          if (existing != completed.end()) {
+            existing->filterMask |= TodoistTask::FILTER_2_BIT;
+          } else {
+            completed.push_back(std::move(entry));
+          }
+        }
+      }
+    }
     if (countError == TodoistClient::OK) {
       RenderLock lock;
-      TODOIST_TASKS.setCompletedToday(completedCount, today, std::move(completedTitles));
+      // The count credits the companion, so it is what either filter matched: the
+      // merged list's own size.
+      const uint16_t completedCount = static_cast<uint16_t>(completed.size());
+      TODOIST_TASKS.setCompletedToday(completedCount, today, std::move(completed));
       // Gated on success: a failed fetch means nothing here actually changed,
       // so there is nothing new to credit.
       COMPANION.recordActivity();
     } else {
-      LOG_ERR("OSYNC", "Completed-count fetch failed: %s", TodoistClient::errorString(countError));
+      LOG_ERR("OSYNC", "Completed-tasks fetch failed: %s", TodoistClient::errorString(countError));
     }
   }
 

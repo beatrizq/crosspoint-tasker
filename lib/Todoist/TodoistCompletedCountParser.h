@@ -12,20 +12,21 @@
  *   {"items":[{"id":"...","content":"...","completed_at":"...",...}, ...],
  *    "next_cursor":null}
  *
- * Every field except `content` is walked past without being stored, the same
- * streaming approach TodoistTasksParser uses -- content (the task's title) is
- * captured into a small per-item scratch buffer and handed to an optional
- * sink as each item closes, so a response with many items never needs more
- * than one title's worth of RAM at a time. The sink is optional: a caller
+ * Every field except `id` and `content` is walked past without being stored,
+ * the same streaming approach TodoistTasksParser uses -- the task's id and
+ * title are captured into small per-item scratch buffers and handed to an
+ * optional sink as each item closes, so a response with many items never needs
+ * more than one item's worth of RAM at a time. The sink is optional: a caller
  * that only wants the count (as this class originally did) can pass nullptr.
  */
 class TodoistCompletedCountParser {
  public:
-  // Invoked once per completed item, as soon as it closes, with its title
-  // (content field). Not invoked for an item with no content field.
-  using TitleSink = void (*)(void* ctx, const char* content);
+  // Invoked once per completed item, as soon as it closes, with its task id and
+  // title (content field). id is "" when the item carries none. Not invoked for
+  // an item with no content field.
+  using ItemSink = void (*)(void* ctx, const char* id, const char* content);
 
-  explicit TodoistCompletedCountParser(TitleSink sink = nullptr, void* sinkCtx = nullptr);
+  explicit TodoistCompletedCountParser(ItemSink sink = nullptr, void* sinkCtx = nullptr);
 
   TodoistCompletedCountParser(const TodoistCompletedCountParser&) = delete;
   TodoistCompletedCountParser& operator=(const TodoistCompletedCountParser&) = delete;
@@ -47,6 +48,7 @@ class TodoistCompletedCountParser {
     NONE,
     ITEMS,
     CONTENT,
+    ID,
   };
 
   static void sOnKey(void* ctx, const char* key, size_t len);
@@ -60,7 +62,7 @@ class TodoistCompletedCountParser {
   static void sOnArrayEnd(void* ctx);
 
   StreamingJsonParser parser;
-  TitleSink sink;
+  ItemSink sink;
   void* sinkCtx;
 
   Position position;
@@ -72,4 +74,5 @@ class TodoistCompletedCountParser {
   // Same size as TodoistTasksParser's currentContent -- Todoist's own title
   // length convention, not something this parser invents independently.
   char currentContent[121];
+  char currentId[32];
 };

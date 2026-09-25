@@ -276,8 +276,8 @@ TodoistClient::Error TodoistClient::rescheduleTask(freeink::SecureHttpClient& ht
 TodoistClient::Error TodoistClient::fetchCompletedCountForDay(freeink::SecureHttpClient& http,
                                                               const std::string& filter, const std::string& isoDate,
                                                               uint16_t& outCount,
-                                                              const TodoistCompletedCountParser::TitleSink titleSink,
-                                                              void* titleSinkCtx) {
+                                                              const TodoistCompletedCountParser::ItemSink itemSink,
+                                                              void* itemSinkCtx) {
   lastHttpCode = 0;
   outCount = 0;
   if (!TODOIST_STORE.hasToken()) {
@@ -290,7 +290,7 @@ TodoistClient::Error TodoistClient::fetchCompletedCountForDay(freeink::SecureHtt
                           "T23:59:59Z&limit=" + std::to_string(COMPLETED_PAGE_LIMIT) +
                           "&filter_query=" + urlEncode(filter);
 
-  TodoistCompletedCountParser parser(titleSink, titleSinkCtx);
+  TodoistCompletedCountParser parser(itemSink, itemSinkCtx);
 
   if (!http.begin(url)) {
     LOG_ERR("TDA", "Bad completed-count URL");
