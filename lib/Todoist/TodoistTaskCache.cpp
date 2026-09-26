@@ -164,6 +164,24 @@ void TodoistTaskCache::setTasks(std::vector<TodoistTask>&& fetched, const std::s
   rolloverCompletedIfNeeded();
 }
 
+void TodoistTaskCache::mergeFilter2Tasks(std::vector<TodoistTask>&& fetched) {
+  tasks.reserve(std::min(tasks.size() + fetched.size(), MAX_TASKS));
+  for (auto& task : fetched) {
+    const auto existing =
+        std::find_if(tasks.begin(), tasks.end(), [&task](const TodoistTask& other) { return other.id == task.id; });
+    if (existing != tasks.end()) {
+      existing->filterMask |= TodoistTask::FILTER_2_BIT;
+    } else if (tasks.size() < MAX_TASKS) {
+      task.filterMask = TodoistTask::FILTER_2_BIT;
+      tasks.push_back(std::move(task));
+    }
+  }
+  // Same order setTasks() gives: by due date, stable within one.
+  std::stable_sort(tasks.begin(), tasks.end(),
+                   [](const TodoistTask& a, const TodoistTask& b) { return a.dueDays < b.dueDays; });
+  applyOverdueFlags();
+}
+
 void TodoistTaskCache::applyOverdueFlags() {
   const uint16_t threshold = todoist::dueDaysFromIso(syncDate.c_str());
   for (auto& task : tasks) {
@@ -203,6 +221,23 @@ void TodoistTaskCache::setCompletedToday(const uint16_t count, const std::string
   completedTodayEntries = std::move(entries);
   if (completedTodayEntries.size() > MAX_COMPLETED_STORED) completedTodayEntries.resize(MAX_COMPLETED_STORED);
   for (auto& entry : completedTodayEntries) entry.pending = false;
+}
+
+void TodoistTaskCache::mergeCompletedFilter2(std::vector<TodoistCompletedLogEntry>&& entries) {
+  completedTodayEntries.reserve(std::min(completedTodayEntries.size() + entries.size(), MAX_COMPLETED_STORED));
+  for (auto& entry : entries) {
+    const auto existing = std::find_if(completedTodayEntries.begin(), completedTodayEntries.end(),
+                                       [&entry](const TodoistCompletedLogEntry& other) {
+                                         return !entry.taskId.empty() && other.taskId == entry.taskId;
+                                       });
+    if (existing != completedTodayEntries.end()) {
+      existing->filterMask |= TodoistTask::FILTER_2_BIT;
+    } else if (completedTodayEntries.size() < MAX_COMPLETED_STORED) {
+      entry.pending = false;
+      completedTodayEntries.push_back(std::move(entry));
+    }
+  }
+  completedToday = static_cast<uint16_t>(completedTodayEntries.size());
 }
 
 bool TodoistTaskCache::cancelCompletedLogEntry(const size_t displayIndex) {

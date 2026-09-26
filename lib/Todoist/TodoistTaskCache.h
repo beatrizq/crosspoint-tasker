@@ -94,6 +94,13 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   // keeps showing the last date it did know.
   void setTasks(std::vector<TodoistTask>&& fetched, const std::string& date);
 
+  // Adds the tasks Filter 2 matched to the list setTasks() stored for Filter 1: a
+  // task already there gains the FILTER_2_BIT, one that is not is appended with
+  // only that bit. The sync commits each filter as soon as it arrives and merges
+  // the second in, rather than holding both fetches (and the old list) in RAM at
+  // once -- that peak is what starved the next TLS request of heap.
+  void mergeFilter2Tasks(std::vector<TodoistTask>&& fetched);
+
   // Drop the task locally and remember to close it on the server. No-op for an
   // unknown index.
   void completeTaskAt(size_t index);
@@ -137,7 +144,7 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   const std::vector<TodoistCompletedLogEntry>& getCompletedTodayEntries() const { return completedTodayEntries; }
   // Entries kept per filter, and in total: two filters' logs are stored side by
   // side, so the cache holds twice one filter's worth.
-  static constexpr size_t MAX_COMPLETED_TODAY_TITLES = 40;
+  static constexpr size_t MAX_COMPLETED_TODAY_TITLES = 20;
   static constexpr size_t MAX_COMPLETED_STORED = MAX_COMPLETED_TODAY_TITLES * 2;
 
   // Sets today's completed count and titles directly, from a fetch that
@@ -150,6 +157,11 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   // one is Synced (pending=false) -- a fetch is by definition already confirmed
   // by the server, with no push left to cancel.
   void setCompletedToday(uint16_t count, const std::string& date, std::vector<TodoistCompletedLogEntry>&& entries);
+
+  // The same for Filter 2's completions, merged into what setCompletedToday()
+  // stored for Filter 1 (by task id; see mergeFilter2Tasks). completedToday
+  // becomes the merged list's size.
+  void mergeCompletedFilter2(std::vector<TodoistCompletedLogEntry>&& entries);
 
   // Cancels one Cached (not yet pushed) Logs-screen row: removes it from
   // completedTodayEntries, decrements completedToday, and cancels its queued

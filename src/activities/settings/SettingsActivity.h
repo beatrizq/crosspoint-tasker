@@ -32,7 +32,14 @@ enum class SettingAction {
   TextSettings,
   ClockOffset,
   ClockSync,
+  ControlsMenu,
+  LibraryMenu,
 };
+
+// A group of settings. The tab bar shows Display, Reader, System and Organizer;
+// Controls and Library are submenus opened from the Reader tab, each shown by its
+// own SettingsActivity with just that group (a one-tab bar, Back returns).
+enum class SettingsBucket : uint8_t { None, Display, Reader, Controls, Library, System, Organizer };
 
 struct SettingInfo {
   StrId nameId;
@@ -186,10 +193,12 @@ class SettingsActivity final : public Activity {
 
   OptionPopup optionPopup;
 
-  static constexpr int categoryCount = 6;
-  static const StrId categoryNames[categoryCount];
+  // The groups on the tab bar, in order -- all four, or just one in a submenu.
+  std::vector<SettingsBucket> tabBuckets;
+  bool isSubmenu = false;
+  int categoryCount() const { return static_cast<int>(tabBuckets.size()); }
+  static StrId bucketName(SettingsBucket bucket);
 
-  void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
   void rebuildSettingsLists();
@@ -198,8 +207,16 @@ class SettingsActivity final : public Activity {
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
  public:
-  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("Settings", renderer, mappedInput) {}
+  // `only`: show just that group (a submenu); None shows the whole tab bar.
+  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                            SettingsBucket only = SettingsBucket::None)
+      : Activity("Settings", renderer, mappedInput), isSubmenu(only != SettingsBucket::None) {
+    if (isSubmenu) {
+      tabBuckets = {only};
+    } else {
+      tabBuckets = {SettingsBucket::Display, SettingsBucket::Reader, SettingsBucket::System, SettingsBucket::Organizer};
+    }
+  }
   void onEnter() override;
   void onExit() override;
   void loop() override;

@@ -275,7 +275,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 #### Library
 
-Settings for where books come from and how they are kept. (This tab sits between Reader and Controls in Settings.)
+Settings for where books come from and how they are kept. Opened from **Reader ▸ Library**.
 
 - **Show Hidden Files**: Show files and folders whose names start with a dot in the file browser.
 
@@ -289,7 +289,7 @@ Settings for where books come from and how they are kept. (This tab sits between
 
 #### 3.6.3 Controls
 
-- **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
+Reader button and touch controls. Opened from **Reader ▸ Controls**.
 
 - **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from "Prev/Next" (default) to "Next/Prev". You can also disable them entirely. This change is only in effect when reading.
 
@@ -303,6 +303,12 @@ Settings for where books come from and how they are kept. (This tab sits between
   - "Dictionary" - Hold Confirm (~0.4 second) to start dictionary word selection on the current page (see [docs/dictionary.md](docs/dictionary.md)).
   - "Disabled" - Long-press is ignored; only short-press opens the reader menu.
 
+- **Quick-return from footnotes**: Toggles on and off the quick return functionality from the footnotes. When the functionality it's active, a short press of the power button will act as the back button from the footnotes page.
+
+#### 3.6.4 System
+
+- **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
+
 - **Short Power Button Click**: Controls the effect of a short click of the power button:
   
   - "Ignore" (default) - Require a long press to turn off the device
@@ -310,11 +316,8 @@ Settings for where books come from and how they are kept. (This tab sits between
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
   - "Footnotes" - A short press in reading mode opens the footnotes submenu; if only one footnote is present on the page, the referenced page is opened directly. The short press on the power button can be used to select the footnote in the submenu, and to go back to the original page after finish reading the footnote (like the back button).
   - "Refresh" - A short press triggers a manual full-screen refresh, useful for clearing ghosting
-- **Quick-return from footnotes**: Toggles on and off the quick return functionality from the footnotes. When the functionality it's active, a short press of the power button will act as the back button from the footnotes page.
 
-#### 3.6.4 System
-
-- **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
+- **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
 
 - **Wi-Fi Networks**: Connect to Wi-Fi networks for file transfers and firmware updates.
 
