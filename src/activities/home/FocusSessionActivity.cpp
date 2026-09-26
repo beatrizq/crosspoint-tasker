@@ -84,8 +84,9 @@ void FocusSessionActivity::loop() {
     APP_STATE.saveToFile();
   }
   // Unlocked, either just now or already at onEnter(): hand off to the
-  // companion's own screen.
-  activityManager.replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInput));
+  // companion's own screen, which opens the task's Select menu again -- it may
+  // well be done now.
+  activityManager.replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInput, itemId));
 }
 
 void FocusSessionActivity::render(RenderLock&&) {

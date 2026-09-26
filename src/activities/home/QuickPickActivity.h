@@ -127,8 +127,12 @@
  */
 class QuickPickActivity final : public Activity {
  public:
-  QuickPickActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("QuickPick", renderer, mappedInput) {}
+  // `openOptionsForTaskId`: when set, this screen opens that task's Select menu
+  // (Complete, Focus session, Reschedule...) as soon as it is up -- how a
+  // finished focus session hands its task back, since the user may now want to
+  // say it is done.
+  QuickPickActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string openOptionsForTaskId = "")
+      : Activity("QuickPick", renderer, mappedInput), pendingOptionsTaskId(std::move(openOptionsForTaskId)) {}
 
   void onEnter() override;
   void loop() override;
@@ -261,6 +265,9 @@ class QuickPickActivity final : public Activity {
   // already held down when some other gesture left this screen.
   bool upPressSeen = false;
   bool downPressSeen = false;
+
+  // A task whose Select menu is still to be opened; consumed by the first loop().
+  std::string pendingOptionsTaskId;
 
   // millis() at onEnter(), so loop() can briefly ignore a Right1 release
   // right after landing here -- see RIGHT1_ENTRY_GRACE_MS's own comment.

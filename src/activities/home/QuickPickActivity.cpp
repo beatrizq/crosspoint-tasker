@@ -427,11 +427,16 @@ void QuickPickActivity::switchFilter(const uint8_t filterIndex) {
   if (clamped == APP_STATE.todoistActiveFilter) return;
   taskTabModel::setActiveFilter(clamped);
   // The other filter has its own rows and its own set of non-empty tabs, so the
-  // tab set is rebuilt (keeping the same kind selected where the new filter has
-  // it), and the cursor lands on the tab bar rather than wherever the other
-  // filter's cursor happened to be -- always a valid, visible place to be (see
-  // tabBarFocused's own comment).
+  // tab set is rebuilt and lands on its first tab, the same as entering this
+  // screen does -- not on whichever kind the other filter happened to be showing,
+  // which would open Filter 1 on Upcoming just because Filter 2 was there.
+  // OVERDUE is first in tab order, so wanting it resolves to index 0 whether or
+  // not that tab currently exists (see TaskTabModel::rebuildVisibleTabs()). The
+  // cursor lands on the tab bar rather than wherever the other filter's cursor
+  // happened to be -- always a valid, visible place to be (see tabBarFocused's
+  // own comment).
   taskSelectedRow = 0;
+  activeKind = taskTabModel::TaskTabKind::OVERDUE;
   rebuildEmbeddedTabs();
   tabBarFocused = true;
   requestUpdate(true);
@@ -478,6 +483,21 @@ void QuickPickActivity::clearSelectedLogTaskRow() {
 // -- input --------------------------------------------------------------------
 
 void QuickPickActivity::loop() {
+  // A finished focus session's task: open its Select menu now that this screen is
+  // up. The task may be gone by now (done elsewhere), in which case there is
+  // nothing to offer and the screen is just shown.
+  if (!pendingOptionsTaskId.empty()) {
+    const std::string taskId = std::move(pendingOptionsTaskId);
+    pendingOptionsTaskId.clear();
+    const auto& tasks = TODOIST_TASKS.getTasks();
+    for (size_t i = 0; i < tasks.size(); i++) {
+      if (tasks[i].id == taskId) {
+        showTaskRowOptions(i);
+        return;
+      }
+    }
+  }
+
   // Re-checks the companion's mood (in particular, whether it's now inside
   // its sleep window, or a day has rolled over) on the same idle timer
   // HomeActivity::loop() uses -- this screen can sit open just as long (see

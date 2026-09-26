@@ -1038,6 +1038,17 @@ void WifiSelectionActivity::renderForgetPrompt(const Rect* screen, const ThemeMe
 }
 
 void WifiSelectionActivity::onComplete(const bool connected) {
+  // Cancelled (or never connected): put the radio back the way the screen found
+  // it. The scan turns it on, and a caller whose onExit() reboots whenever the
+  // radio is still up (most of them, to clear WiFi/TLS heap fragmentation) would
+  // otherwise restart the device just because the list was opened -- and a
+  // restart always lands on the Companion, not on the screen that opened the
+  // list. No connection was made, so there is nothing to clean up beyond this.
+  if (!connected) {
+    WiFi.scanDelete();
+    WiFi.disconnect(false);
+    WiFi.mode(WIFI_OFF);
+  }
   ActivityResult result;
   result.isCancelled = !connected;
   if (connected) {
