@@ -244,6 +244,10 @@ class QuickPickActivity final : public Activity {
   // other place that calls CompanionTracker::refreshForDisplay().
   unsigned long lastCompanionRefreshMs = 0;
   companion::Mood lastCompanionMood = companion::Mood::Happy;
+  // How many glance rows the last idle check found, so an event ending (which
+  // removes its row) repaints the screen -- see loop()'s own comment. -1 until
+  // the first check, which then repaints once at most.
+  int lastGlanceRowCount = -1;
   // Which of companion::idleBubbleText()'s IDLE_BUBBLE_VARIANT_COUNT lines
   // the bubble shows for the current mood, when it's showing an idle line at
   // all (see render()'s own comment) -- rolled fresh in onEnter() and again

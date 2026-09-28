@@ -3,6 +3,7 @@
 #include <CivilTime.h>
 #include <GCalEventCache.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <I18n.h>
 #include <TodoistStore.h>
 #include <TodoistTaskCache.h>
@@ -515,6 +516,14 @@ void QuickPickActivity::loop() {
       idleVariant = static_cast<uint8_t>(esp_random() % companion::IDLE_BUBBLE_VARIANT_COUNT);
       requestUpdate();
     }
+    // An event ending drops its glance row, and nothing else would repaint for
+    // that -- so the same idle tick also repaints when the number of rows shown
+    // has changed since the last paint.
+    const int glanceRows = static_cast<int>(todaysEvents().size());
+    if (glanceRows != lastGlanceRowCount) {
+      lastGlanceRowCount = glanceRows;
+      requestUpdate();
+    }
   }
 
   // A press seen here is a fresh one, so nothing is owed any more.
@@ -875,8 +884,31 @@ std::vector<QuickPickActivity::GlanceEventRow> QuickPickActivity::todaysEvents()
   // moved on since, so an event dated "yesterday" in a stale cache simply
   // no longer matches -- no separate staleness check needed the way the
   // ">= today" comparison this replaced did.
+  // An event that has already ended is not worth a row: once the local time is
+  // at or past its end, it is dropped. Only a timed event with a known end that
+  // lies after its start can end today (an all-day one runs all day; an unknown
+  // end, or an end at or before the start -- one that runs past midnight -- is
+  // kept rather than guessed at), and only when the clock says what time it is.
+  uint16_t nowMinute = civil::NO_TIME;
+  {
+    uint16_t year = 0;
+    uint8_t month = 0;
+    uint8_t day = 0;
+    uint8_t hour = 0;
+    uint8_t minute = 0;
+    if (halClock.getUtcDateTime(year, month, day, hour, minute)) {
+      // clockUtcOffsetQ is biased by 48 (48 == UTC+0), the same clamp and bias
+      // every other local-time reader of it uses.
+      const int32_t offsetQuarterHours = static_cast<int32_t>(std::min<uint8_t>(SETTINGS.clockUtcOffsetQ, 104)) - 48;
+      nowMinute = companion::localMinuteOfDay(hour, minute, offsetQuarterHours);
+    }
+  }
   for (const auto& event : GCAL_EVENTS.getEvents()) {
     if (event.date != today) continue;
+    if (nowMinute != civil::NO_TIME && !event.isAllDay() && event.endMin != civil::NO_TIME &&
+        event.endMin > event.startMin && nowMinute >= event.endMin) {
+      continue;
+    }
     GlanceEventRow row;
     row.title = event.summary;
     if (!event.isAllDay()) {
