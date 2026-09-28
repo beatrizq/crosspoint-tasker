@@ -185,6 +185,9 @@ size_t unescapeGadgetbridgeEscapes(char* buf, const size_t len) {
   return writeIdx;
 }
 
+// Defined further down with the other device->phone senders.
+void sendNotifyAck(uint32_t id);
+
 // Handles one fully-reassembled, unescaped command. Anything other than a
 // GB({...}) JSON call is some other Espruino snippet Gadgetbridge also sends
 // (setTime(...), storage writes, ...) -- nothing here to parse, and nothing
@@ -219,6 +222,10 @@ void processCommand(char* buf, size_t len) {
     BLE_NOTIFICATIONS.push(id, false, src, title, body, hour, minute);
     BLE_NOTIFICATIONS.saveToFile();
     LOG_INF("BLE", "Notification from %s: %s: %s", src, title, body);
+    // Tell the phone this one is stored, so it stops sending it again. Sent after
+    // the queue is saved, and also when push() found it already held (a resend
+    // of something the device has): either way the device has it.
+    sendNotifyAck(id);
   } else if (strcmp(type, "call") == 0) {
     const char* cmd = doc["cmd"] | "";
     if (strcmp(cmd, "incoming") == 0) {
@@ -434,6 +441,25 @@ void sendBatteryStatus() {
                            static_cast<unsigned>(powerManager.getBatteryPercentage()), gpio.isUsbConnected() ? 1 : 0);
   if (len <= 0 || static_cast<size_t>(len) >= sizeof(buf)) {
     LOG_ERR("BLE", "Battery status message truncated or encoding failed");
+    return;
+  }
+  notifyChunked(buf, static_cast<size_t>(len));
+}
+
+// The delivery receipt for a stored notification: the patched Gadgetbridge
+// ("notifyAck", see BangleJSDeviceSupport) stops forwarding that notification
+// once it has this, and forwards anything never acked again on the next
+// reconnect -- the way a notification the device missed (asleep, out of range,
+// a lost write) gets a second chance without ones it already has repeating.
+// CRLF-terminated for the same reason sendBatteryStatus() is. id 0 is what a
+// notification without an id parses to, and cannot be matched to anything, so
+// there is nothing to confirm.
+void sendNotifyAck(const uint32_t id) {
+  if (notifyCharacteristic == nullptr || id == 0) return;
+  char buf[48];
+  const int len = snprintf(buf, sizeof(buf), "{\"t\":\"notifyAck\",\"id\":%lu}\r\n", static_cast<unsigned long>(id));
+  if (len <= 0 || static_cast<size_t>(len) >= sizeof(buf)) {
+    LOG_ERR("BLE", "Notification ack truncated or encoding failed");
     return;
   }
   notifyChunked(buf, static_cast<size_t>(len));
