@@ -197,12 +197,17 @@ const char* runTasks() {
 
   // Both filters: a task either one matches is one row, and one both match
   // carries both bits (TodoistTask::filterMask). The second fetch is skipped when
-  // both filters are the same query. Each filter's result is committed to the
-  // cache the moment it arrives, and the second is merged in -- so at most one
-  // fetched list (~60 tasks, roughly 10 KB) is held next to the cache at any
-  // time. Holding the old cache, both fetches and their merge at once left too
-  // little heap for the next TLS request (TodoistClient's own heap gate).
+  // both filters are the same query. Each filter's fetch is committed to the
+  // cache the moment it arrives -- via setTasksForFilter(), which only ever
+  // touches that filter's own slice of the list -- rather than merging both
+  // fetches together first and replacing the whole cache once: that held the
+  // old cache, both fetches and the merge result all at once (the peak that
+  // starved the next TLS request of heap), *and* meant a failure fetching the
+  // second filter discarded the first filter's already-fetched data along with
+  // it, wiping every tab under whichever filter's fetch failed even though its
+  // own request had nothing wrong with it.
   const bool sameFilter = TODOIST_STORE.filtersMatch();
+  const uint8_t bothFiltersBit = TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT;
   std::vector<TodoistTask> fetched;
   std::string serverDate;
   if (error == TodoistClient::OK) {
@@ -222,11 +227,8 @@ const char* runTasks() {
   }
 
   if (error == TodoistClient::OK) {
-    if (sameFilter) {
-      for (auto& task : fetched) task.filterMask = TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT;
-    }
     RenderLock lock;
-    TODOIST_TASKS.setTasks(std::move(fetched), today);
+    TODOIST_TASKS.setTasksForFilter(std::move(fetched), sameFilter ? bothFiltersBit : TodoistTask::FILTER_1_BIT, today);
   }
   if (error == TodoistClient::OK && !sameFilter) {
     std::vector<TodoistTask> fetched2;
@@ -236,7 +238,7 @@ const char* runTasks() {
     resetTaskWatchdogIfSubscribed();
     if (error == TodoistClient::OK) {
       RenderLock lock;
-      TODOIST_TASKS.mergeFilter2Tasks(std::move(fetched2));
+      TODOIST_TASKS.setTasksForFilter(std::move(fetched2), TodoistTask::FILTER_2_BIT, "");
     }
   }
 
@@ -248,13 +250,12 @@ const char* runTasks() {
   // alone (TodoistCompletedLogEntry::filterMask). Best-effort: the open-task
   // list above is this sync's real job, so a failure here does not fail the sync
   // itself - it just leaves today's completed count and the companion's credit
-  // stale until the next attempt. Committed per filter, like the tasks above.
+  // stale until the next attempt. Committed per filter, like the tasks above, so
+  // a failure fetching one filter's completions cannot erase the other's.
   if (error == TodoistClient::OK && !today.empty()) {
     std::vector<TodoistCompletedLogEntry> completed;
     completed.reserve(TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES);
-    CompletedCollector first{&completed,
-                             static_cast<uint8_t>(sameFilter ? (TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT)
-                                                             : TodoistTask::FILTER_1_BIT)};
+    CompletedCollector first{&completed, static_cast<uint8_t>(sameFilter ? bothFiltersBit : TodoistTask::FILTER_1_BIT)};
     uint16_t ignoredCount = 0;
     resetTaskWatchdogIfSubscribed();
     TodoistClient::Error countError = TodoistClient::fetchCompletedCountForDay(
@@ -263,8 +264,8 @@ const char* runTasks() {
     bool committed = false;
     if (countError == TodoistClient::OK) {
       RenderLock lock;
-      const uint16_t completedCount = static_cast<uint16_t>(completed.size());
-      TODOIST_TASKS.setCompletedToday(completedCount, today, std::move(completed));
+      TODOIST_TASKS.setCompletedForFilter(std::move(completed), sameFilter ? bothFiltersBit : TodoistTask::FILTER_1_BIT,
+                                          today);
       committed = true;
     }
     if (countError == TodoistClient::OK && !sameFilter) {
@@ -277,7 +278,7 @@ const char* runTasks() {
       resetTaskWatchdogIfSubscribed();
       if (countError == TodoistClient::OK) {
         RenderLock lock;
-        TODOIST_TASKS.mergeCompletedFilter2(std::move(completed2));
+        TODOIST_TASKS.setCompletedForFilter(std::move(completed2), TodoistTask::FILTER_2_BIT, "");
       }
     }
     if (countError != TodoistClient::OK) {

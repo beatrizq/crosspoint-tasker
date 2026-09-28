@@ -92,14 +92,26 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   // due strictly before it is flagged. An empty date leaves the stored date
   // untouched and clears no flags, so a sync that could not establish today
   // keeps showing the last date it did know.
-  void setTasks(std::vector<TodoistTask>&& fetched, const std::string& date);
-
-  // Adds the tasks Filter 2 matched to the list setTasks() stored for Filter 1: a
-  // task already there gains the FILTER_2_BIT, one that is not is appended with
-  // only that bit. The sync commits each filter as soon as it arrives and merges
-  // the second in, rather than holding both fetches (and the old list) in RAM at
-  // once -- that peak is what starved the next TLS request of heap.
-  void mergeFilter2Tasks(std::vector<TodoistTask>&& fetched);
+  // Refreshes `filterBit`'s slice of the task list from a fresh fetch, without
+  // touching any task that belongs only to the *other* filter bit: an existing
+  // task tagged with filterBit that the fetch no longer contains loses just that
+  // bit (and is dropped only if that leaves it belonging to nothing); a fetched
+  // task already known under the other filter (matched by id) has its fields
+  // refreshed and gains filterBit rather than becoming a duplicate row; anything
+  // else is a new row, tagged filterBit, capped at MAX_TASKS.
+  //
+  // Called once per filter rather than once for a combined, pre-merged list, so
+  // a sync commits each filter's own fetch the moment it arrives (peak memory:
+  // the existing cache plus one fetched list, never both fetches plus the old
+  // cache plus a merged copy at once) *and* a later filter's fetch failing can
+  // never wipe what an earlier filter's already-committed fetch just wrote --
+  // the previous approach's wholesale replace-then-merge silently emptied every
+  // other-filter tab whenever the second request failed. `date` updates syncDate
+  // when non-empty (pass "" for a second filter that isn't the sync's clock
+  // source); filterBit covers both bits for a single fetch that is authoritative
+  // for the whole list (the two filters being the same query), reproducing a
+  // plain full replace.
+  void setTasksForFilter(std::vector<TodoistTask>&& fetched, uint8_t filterBit, const std::string& date);
 
   // Drop the task locally and remember to close it on the server. No-op for an
   // unknown index.
@@ -156,12 +168,18 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   // first. entries is moved from and truncated to MAX_COMPLETED_STORED; every
   // one is Synced (pending=false) -- a fetch is by definition already confirmed
   // by the server, with no push left to cancel.
-  void setCompletedToday(uint16_t count, const std::string& date, std::vector<TodoistCompletedLogEntry>&& entries);
-
-  // The same for Filter 2's completions, merged into what setCompletedToday()
-  // stored for Filter 1 (by task id; see mergeFilter2Tasks). completedToday
-  // becomes the merged list's size.
-  void mergeCompletedFilter2(std::vector<TodoistCompletedLogEntry>&& entries);
+  // Same idea as setTasksForFilter(), for today's completed-task log: refreshes
+  // `filterBit`'s entries from a fresh fetch without touching rows that belong
+  // only to the other filter, so a later filter's fetch failing can never erase
+  // an earlier one's already-committed Logs entries. Every entry from a fetch is
+  // Synced (pending=false) -- a fetch is by definition already confirmed by the
+  // server, with no push left to cancel. completedToday becomes the whole list's
+  // size (both filters combined) after the call. `date` updates completedDay's
+  // resolution the same way setTasksForFilter()'s does; pass "" for a second
+  // filter. filterBit covering both bits reproduces a plain full replace, for a
+  // single fetch authoritative for the whole day.
+  void setCompletedForFilter(std::vector<TodoistCompletedLogEntry>&& entries, uint8_t filterBit,
+                             const std::string& date);
 
   // Cancels one Cached (not yet pushed) Logs-screen row: removes it from
   // completedTodayEntries, decrements completedToday, and cancels its queued
