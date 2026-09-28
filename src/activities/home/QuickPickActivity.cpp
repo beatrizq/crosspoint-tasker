@@ -995,6 +995,21 @@ void QuickPickActivity::render(RenderLock&&) {
     renderer.invertRect(headerRect.x, headerRect.y, headerRect.width, HEADER_HIGHLIGHT_HEIGHT);
   }
 
+  // The filters' own names, or Filter1/Filter2 until they are named.
+  const std::string& filter1Name = TODOIST_STORE.getFilterName(0);
+  const std::string& filter2Name = TODOIST_STORE.getFilterName(1);
+  const char* const filter1Label = filter1Name.empty() ? tr(STR_COMPANION_SIDE_FILTER_1) : filter1Name.c_str();
+  const char* const filter2Label = filter2Name.empty() ? tr(STR_COMPANION_SIDE_FILTER_2) : filter2Name.c_str();
+  // Drawn here, right after the header, rather than at the very end with the
+  // front button hints -- so the speech bubble and the companion's pose
+  // (painted below) land on top of these boxes wherever they overlap,
+  // instead of the labels punching a hole through the bubble/pose. This is
+  // purely about paint order: which filter is active (drawn inverted) still
+  // works the same either way.
+  GUI.drawSideButtonHints(renderer, filter1Label, filter2Label,
+                          /*topSelected=*/APP_STATE.todoistActiveFilter == 0,
+                          /*bottomSelected=*/APP_STATE.todoistActiveFilter == 1);
+
   // The glance strip (see this file's own header comment) sits right under
   // the header -- purely informational itself (it neither joins the
   // Left1/Left2 loop below nor sits inside either focus highlight), but
@@ -1142,12 +1157,10 @@ void QuickPickActivity::render(RenderLock&&) {
 
   // Straight from the sprite to the embedded Tasks section below -- no mood
   // label in between any more (removed entirely, freeing this space for the
-  // section to sit higher).
-  // The filters' own names, or Filter1/Filter2 until they are named.
-  const std::string& filter1Name = TODOIST_STORE.getFilterName(0);
-  const std::string& filter2Name = TODOIST_STORE.getFilterName(1);
-  const char* const filter1Label = filter1Name.empty() ? tr(STR_COMPANION_SIDE_FILTER_1) : filter1Name.c_str();
-  const char* const filter2Label = filter2Name.empty() ? tr(STR_COMPANION_SIDE_FILTER_2) : filter2Name.c_str();
+  // section to sit higher). The filters' own names (or Filter1/Filter2) were
+  // computed, and their side-button boxes already drawn, right after the header
+  // -- see this file's own header comment on why the bubble and pose need to
+  // paint over them, not the reverse.
   const int sideButtonsBottom = GUI.getSideButtonHintsBottom(renderer, filter1Label, filter2Label);
   const int sectionTopNatural = spriteTop + spriteH + LABEL_GAP;
   // 0 means there is no shared line to sit below (see getSideButtonHintsBottom()),
@@ -1242,13 +1255,6 @@ void QuickPickActivity::render(RenderLock&&) {
   }
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, leftLabel, rightLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  // Side button labels (Up = Filter 1's name, Down = Filter 2's) -- which Todoist filter the
-  // section below the companion shows (see loop()'s own comment above and
-  // switchFilter()). The one showing is drawn inverted.
-  GUI.drawSideButtonHints(renderer, filter1Label, filter2Label,
-                          /*topSelected=*/APP_STATE.todoistActiveFilter == 0,
-                          /*bottomSelected=*/APP_STATE.todoistActiveFilter == 1);
 
   renderer.displayBuffer();
 }
