@@ -217,9 +217,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "sleepScreenCoverFilter", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_INVERT_SLEEP_SCREEN, &CrossPointSettings::sleepScreenInvert, "sleepScreenInvert",
                             StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_QUICK_RESUME_TIMEOUT, &CrossPointSettings::quickResumeSleepScreen,
-                          {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "quickResumeSleepScreen",
-                          StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_ORGANIZER_FONT_SIZE, &CrossPointSettings::organizerFontSize,
                           {StrId::STR_SIZE_SMALL, StrId::STR_SIZE_LARGE}, "organizerFontSize",
                           StrId::STR_CAT_ORGANIZER),
@@ -335,10 +332,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeoutMinutes,
             {CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES, CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1},
             "sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM),
-        SettingInfo::Enum(
-            StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
-            "shortPwrBtn", StrId::STR_CAT_SYSTEM),
+        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
+                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
+                           StrId::STR_FOOTNOTES, StrId::STR_QUICK_RESUME},
+                          "shortPwrBtn", StrId::STR_CAT_SYSTEM),
+        // A short press already covers Quick Resume for the manual-sleep case
+        // (shortPwrBtn's own value above); this is the automatic,
+        // inactivity-timeout case's equivalent choice.
+        SettingInfo::Enum(StrId::STR_TIMEOUT, &CrossPointSettings::timeoutSleepScreen,
+                          {StrId::STR_SLEEP, StrId::STR_QUICK_RESUME}, "timeoutSleepScreen", StrId::STR_CAT_SYSTEM),
 
         // --- Library ---
         SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",

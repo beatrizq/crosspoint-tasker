@@ -21,10 +21,11 @@
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
+  // Mirrors main.cpp's enterDeepSleep() own isQuickResumeSleep exactly -- this
+  // is that same sleep, rendering its own entry screen a moment later.
   const bool renderQuickResume =
-      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
-      (fromTimeout &&
-       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
+      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME || forceQuickResume ||
+      (fromTimeout && SETTINGS.timeoutSleepScreen == CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_QUICK_RESUME);
 
   if (renderQuickResume) {
     return renderLastScreenSleepScreen();

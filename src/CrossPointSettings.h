@@ -147,7 +147,21 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Short power button press actions
-  enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, FORCE_REFRESH = 3, FOOTNOTES = 4, SHORT_PWRBTN_COUNT };
+  enum SHORT_PWRBTN {
+    IGNORE = 0,
+    SLEEP = 1,
+    PAGE_TURN = 2,
+    FORCE_REFRESH = 3,
+    FOOTNOTES = 4,
+    // A genuine short press (released before the ordinary hold-to-sleep
+    // duration) sleeps the device using Quick Resume specifically, regardless
+    // of the chosen Sleep Screen mode; holding it past that duration still
+    // sleeps normally, with whichever Sleep Screen mode is set -- see the
+    // release-triggered branch in main.cpp's loop() and
+    // enterDeepSleep()'s own forceQuickResume parameter.
+    SHORT_PWRBTN_QUICK_RESUME = 5,
+    SHORT_PWRBTN_COUNT
+  };
 
   // Long-press Confirm action while reading an EPUB. The setting cycles through these values.
   // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
@@ -202,11 +216,17 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   enum TOUCH_READER_CONTROLS { TOUCH_READER_OFF = 0, TOUCH_READER_ON = 1, TOUCH_READER_CONTROLS_COUNT };
 
-  enum QUICK_RESUME_SLEEP_SCREEN {
-    QUICK_RESUME_NEVER = 0,
-    QUICK_RESUME_AFTER_TIMEOUT = 1,
-    QUICK_RESUME_SLEEP_SCREEN_COUNT
-  };
+  // Which manual/automatic sleeps use Quick Resume (a fast partial refresh that
+  // keeps the current screen visible with a moon icon) instead of the chosen
+  // Sleep Screen mode's own image. Applies only when Sleep Screen itself is not
+  // already set to Quick Resume outright, where every sleep already does this
+  // regardless (see enterDeepSleep()'s own isQuickResumeSleep).
+  // Which sleep image an automatic, inactivity-timeout sleep uses -- the manual,
+  // power-button case is a separate setting (shortPwrBtn's own SHORT_PWRBTN_QUICK_RESUME
+  // value). Not consulted at all when Sleep Screen itself is already set to
+  // Quick Resume, where every sleep already does this regardless (see
+  // enterDeepSleep()'s own isQuickResumeSleep).
+  enum TIMEOUT_SLEEP_SCREEN { TIMEOUT_SLEEP = 0, TIMEOUT_QUICK_RESUME = 1, TIMEOUT_SLEEP_SCREEN_COUNT };
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
@@ -356,7 +376,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
-  uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
+  // See TIMEOUT_SLEEP_SCREEN's own comment for what each value means.
+  uint8_t timeoutSleepScreen = TIMEOUT_SLEEP;
 
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;

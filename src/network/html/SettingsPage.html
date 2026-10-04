@@ -453,7 +453,7 @@
   }
 
   function syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged) {
-    const timeoutValue = getControlValue('quickResumeSleepScreen');
+    const timeoutValue = getControlValue('timeoutSleepScreen');
     if (timeoutValue === undefined) return false;
 
     let changed = false;
@@ -464,7 +464,7 @@
 
     if (isQuickResumeSleepScreenSelected()) {
       if (timeoutValue !== 1) {
-        changed = setControlValue('quickResumeSleepScreen', 1);
+        changed = setControlValue('timeoutSleepScreen', 1);
         quickResumeTimeoutAutoEnabled = !preserveQuickResumeTimeoutOn;
       } else if (sleepScreenChanged && !preserveQuickResumeTimeoutOn) {
         quickResumeTimeoutAutoEnabled = true;
@@ -473,7 +473,7 @@
     }
 
     if (sleepScreenChanged && quickResumeTimeoutAutoEnabled && !preserveQuickResumeTimeoutOn) {
-      changed = setControlValue('quickResumeSleepScreen', 0);
+      changed = setControlValue('timeoutSleepScreen', 0);
       quickResumeTimeoutAutoEnabled = false;
     }
     return changed;
@@ -492,7 +492,7 @@
   }
 
   function handleSettingChanged(key) {
-    syncQuickResumeTimeoutForSleepScreen(key === 'sleepScreen', key === 'quickResumeSleepScreen');
+    syncQuickResumeTimeoutForSleepScreen(key === 'sleepScreen', key === 'timeoutSleepScreen');
     if (key === 'shortPwrBtn') {
       updateSettingsVisibility();
     }
@@ -538,7 +538,7 @@
       updateSettingsVisibility();
       document.getElementById('save-container').style.display = '';
       document.getElementById('saveBtn').disabled = true;
-      preserveQuickResumeTimeoutOn = getControlValue('quickResumeSleepScreen') === 1;
+      preserveQuickResumeTimeoutOn = getControlValue('timeoutSleepScreen') === 1;
       quickResumeTimeoutAutoEnabled = false;
       if (syncQuickResumeTimeoutForSleepScreen(true, false)) {
         markChanged();

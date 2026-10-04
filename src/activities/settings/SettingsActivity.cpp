@@ -105,10 +105,6 @@ void SettingsActivity::rebuildSettingsLists() {
   // Where books come from and how reading progress follows them around.
   librarySettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   librarySettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
-  // App Order leads the individual apps, as asked: it is a property of the
-  // set of apps rather than of any one of them, so it comes first rather
-  // than trailing after it.
-  organizerSettings.push_back(SettingInfo::Action(StrId::STR_APP_ORDER, SettingAction::AppOrder));
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_TODOIST, SettingAction::Todoist));
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_CALENDAR, SettingAction::GoogleCalendar));
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_COMPANION, SettingAction::Companion));
@@ -185,7 +181,7 @@ void SettingsActivity::onEnter() {
   selectedSettingIndex = 0;
   headerFocused = false;
   preserveQuickResumeTimeoutOn =
-      SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
+      SETTINGS.timeoutSleepScreen == CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_QUICK_RESUME;
   quickResumeTimeoutAutoEnabled = false;
   // Only the top-level screen owns the sleep-screen rules; a submenu holds none
   // of those settings.
@@ -402,7 +398,7 @@ void SettingsActivity::toggleCurrentSetting() {
 
   const auto& setting = (*currentSettings)[selectedSetting];
   const bool sleepScreenChanged = setting.valuePtr == &CrossPointSettings::sleepScreen;
-  const bool quickResumeTimeoutChanged = setting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
+  const bool quickResumeTimeoutChanged = setting.valuePtr == &CrossPointSettings::timeoutSleepScreen;
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
@@ -584,13 +580,16 @@ void SettingsActivity::toggleCurrentSetting() {
 void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {
   if (quickResumeTimeoutChanged) {
     preserveQuickResumeTimeoutOn =
-        SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
+        SETTINGS.timeoutSleepScreen == CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_QUICK_RESUME;
     quickResumeTimeoutAutoEnabled = false;
   }
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) {
-    if (SETTINGS.quickResumeSleepScreen != CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT) {
-      SETTINGS.quickResumeSleepScreen = CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
+    if (SETTINGS.timeoutSleepScreen != CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_QUICK_RESUME) {
+      // Redundant while Sleep Screen mode itself is Quick Resume -- every
+      // sleep already resumes quick regardless of this setting -- but showing
+      // Sleep here would read as contradicting that.
+      SETTINGS.timeoutSleepScreen = CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_QUICK_RESUME;
       quickResumeTimeoutAutoEnabled = !preserveQuickResumeTimeoutOn;
     } else if (sleepScreenChanged && !preserveQuickResumeTimeoutOn) {
       quickResumeTimeoutAutoEnabled = true;
@@ -599,7 +598,7 @@ void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChan
   }
 
   if (sleepScreenChanged && quickResumeTimeoutAutoEnabled && !preserveQuickResumeTimeoutOn) {
-    SETTINGS.quickResumeSleepScreen = CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_NEVER;
+    SETTINGS.timeoutSleepScreen = CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_SLEEP;
     quickResumeTimeoutAutoEnabled = false;
   }
 }

@@ -134,7 +134,7 @@ class ActivityManager {
   void goToReadMenu();
   void goToBrowser(bool returnToReadMenu = false);
   void goToReader(std::string path, bool allowFastInitialRefresh = false);
-  void goToSleep(bool fromTimeout = false);
+  void goToSleep(bool fromTimeout = false, bool forceQuickResume = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();

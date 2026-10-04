@@ -63,7 +63,6 @@ class TodoistStore : public PersistableStore<TodoistStore> {
   void setToken(const std::string& value);
   const std::string& getToken() const { return token; }
   bool hasToken() const { return !token.empty(); }
-  void clearToken();
 
   void setFilter(const std::string& value);
   const std::string& getFilter() const { return filter; }

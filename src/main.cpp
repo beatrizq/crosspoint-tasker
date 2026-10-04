@@ -204,16 +204,18 @@ static bool loadSleepFrameBuffer() {
   return true;
 }
 
-// Enter deep sleep mode
-void enterDeepSleep(bool fromTimeout = false) {
+// Enter deep sleep mode. forceQuickResume: the release-triggered short-press
+// branch below passes true, since a genuine short press means Quick Resume
+// regardless of fromTimeout/timeoutSleepScreen -- those two only ever decide
+// the automatic, inactivity-timeout case.
+void enterDeepSleep(bool fromTimeout = false, bool forceQuickResume = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
   APP_STATE.lastSleepFromQuickPick = activityManager.isQuickPickActivity();
 
   const bool isQuickResumeSleep =
-      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
-      (fromTimeout &&
-       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
+      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME || forceQuickResume ||
+      (fromTimeout && SETTINGS.timeoutSleepScreen == CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_QUICK_RESUME);
   APP_STATE.showBootScreen = !isQuickResumeSleep;
 
   APP_STATE.saveToFile();
@@ -221,7 +223,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
   deepSleepInProgress = true;
-  activityManager.goToSleep(fromTimeout);
+  activityManager.goToSleep(fromTimeout, forceQuickResume);
 
   if (isQuickResumeSleep) {
     saveSleepFrameBuffer();
@@ -621,7 +623,27 @@ void loop() {
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;
     }
+    // Held past the threshold: a deliberate press either way, so this always
+    // sleeps with the ordinary Sleep Screen mode -- Quick Resume's own
+    // short-press case is the *other* branch below, which only fires on an
+    // early release, never here.
     enterDeepSleep();
+    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+    return;
+  }
+
+  // Short Power Button Click == Quick Resume: released before the threshold
+  // above was reached, so this was a genuine short press rather than the
+  // ordinary held-to-sleep gesture -- sleep now, forcing Quick Resume
+  // regardless of the configured Sleep Screen mode. getPowerButtonHeldTime()
+  // still reports the just-ended press's own duration once released (it does
+  // not reset to 0), so this and the branch above are mutually exclusive: one
+  // fires while still held (never reaching this point), the other only once
+  // released short of it.
+  if (millis() >= allowSleepAt && SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SHORT_PWRBTN_QUICK_RESUME &&
+      gpio.wasReleased(HalGPIO::BTN_POWER) && !gpio.isPressed(HalGPIO::BTN_DOWN) &&
+      gpio.getPowerButtonHeldTime() < SETTINGS.getPowerButtonDuration()) {
+    enterDeepSleep(/*fromTimeout=*/false, /*forceQuickResume=*/true);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
   }

@@ -185,7 +185,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
-  - "Quick resume" - The text of the last page read will be displayed on the sleep screen and a moon icon is shown on the edge of the screen. Waking up the device will return to the same page of the opened book. This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book.
+  - "Quick resume" - Instead of a static image, the screen you were on stays visible with a moon icon shown on the edge, and the device skips its usual boot screen on wake. If you were reading, it returns straight to the same page. If you were on the Companion screen, it returns there. From anywhere else (Settings, Tasks, Calendar, and so on), the last screen is only what briefly flashes on wake before the device lands on the Companion screen - only the Reader and the Companion screen actually resume to where you were.
 
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   
@@ -198,7 +198,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
   - "Inverted" - The image will be inverted as in white & black and will be displayed without grayscale conversion
 
-- **Quick Resume on Timeout**: Whether to enable the "Quick Resume" sleep screen when the device goes to sleep due to inactivity (System > Time to Sleep). This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book. This overwrites the Sleep Screen Cover Mode when enabled.
+Two more settings, under System, control when a sleep that isn't triggered by the "Quick Resume" Sleep Screen mode itself still uses it - a fast partial refresh that keeps the current screen visible with a moon icon, instead of the chosen Sleep Screen's own image, for resuming instantly without waiting for the device to fully wake up: **Timeout** for the automatic, inactivity sleep, and **Short Power Button Click**'s own "Quick Resume" option for a manual sleep. See both below.
 
 - **Status Bar**: Configure the status bar displayed while reading:
   
@@ -309,10 +309,16 @@ Reader button and touch controls. Opened from **Reader ▸ Controls**.
 
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
 
+- **Timeout**: Which sleep screen an automatic, inactivity-timeout sleep (above) uses:
+
+  - "Sleep" (default) - The chosen Sleep Screen mode's own image
+  - "Quick Resume" - The fast partial-refresh resume described above instead
+
 - **Short Power Button Click**: Controls the effect of a short click of the power button:
   
   - "Ignore" (default) - Require a long press to turn off the device
-  - "Sleep" - A short press puts the device into sleep mode
+  - "Sleep" - Any press, however brief, puts the device to sleep with the chosen Sleep Screen mode's own image
+  - "Quick Resume" - A genuine short press (released before the same duration a held press would need to sleep) puts the device to sleep with the fast partial-refresh resume described above instead; holding the button past that duration still sleeps with the chosen Sleep Screen mode's own image
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
   - "Footnotes" - A short press in reading mode opens the footnotes submenu; if only one footnote is present on the page, the referenced page is opened directly. The short press on the power button can be used to select the footnote in the submenu, and to go back to the original page after finish reading the footnote (like the back button).
   - "Refresh" - A short press triggers a manual full-screen refresh, useful for clearing ghosting

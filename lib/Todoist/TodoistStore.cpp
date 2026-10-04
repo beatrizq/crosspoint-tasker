@@ -59,8 +59,6 @@ void TodoistStore::setToken(const std::string& value) {
   token = value.size() > MAX_TOKEN_LEN ? value.substr(0, MAX_TOKEN_LEN) : value;
 }
 
-void TodoistStore::clearToken() { token.clear(); }
-
 void TodoistStore::setFilter(const std::string& value) {
   // Clearing the filter falls back to the default rather than being stored: an
   // empty query is a 400 from the API, so it would only ever look like a broken

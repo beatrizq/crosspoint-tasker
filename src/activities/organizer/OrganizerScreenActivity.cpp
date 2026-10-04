@@ -252,15 +252,6 @@ void OrganizerScreenActivity::loop() {
       return;
     }
     if (selectedIndex == 0) {
-      // Tabs focused: a press cycles them, a hold syncs the tab being shown.
-      //
-      // The hold is the only way in to a tab that has never synced. An empty
-      // list has no rows, so the tab bar is the only navigable index, and the
-      // row gestures below cannot be reached at all until something is on
-      // screen.
-      //
-      // A one-tab screen has nothing to cycle, so there the short press syncs
-      // too rather than leaving the button dead.
       if (mappedInput.getHeldTime() >= LONG_PRESS_MS || tabCount() <= 1) {
         startSync();
         return;
@@ -272,10 +263,6 @@ void OrganizerScreenActivity::loop() {
       requestUpdate(true);
       return;
     }
-    // A press acts on the row, if the screen has an action for it. A hold does
-    // nothing: syncing belongs to the tab bar alone, and letting the same
-    // gesture act on a row one place lower would make a misplaced hold
-    // destructive.
     if (mappedInput.getHeldTime() < LONG_PRESS_MS) onRowConfirm();
     return;
   }
@@ -433,11 +420,6 @@ void OrganizerScreenActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage);
   } else if (itemCount == 0) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, emptyMessage());
-    // An empty list has no rows, so the tab bar is the only thing that can be
-    // focused and the hold is the only gesture that reaches a sync. Spelling it
-    // out here is the only place it can be discovered: the Select hint is
-    // already spoken for by the tab it switches to. A one-tab screen syncs on a
-    // plain press, so there the hint would be wrong and is left out.
     if (tabCount() > 1) {
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2,
                                 tr(STR_ORGANIZER_HOLD_TO_SYNC));
@@ -484,10 +466,6 @@ void OrganizerScreenActivity::render(RenderLock&&) {
     }
   }
 
-  // Select is context-dependent: it cycles tabs when they are focused - or syncs,
-  // on a screen with only one - and otherwise does whatever the screen offers on
-  // a row. Syncing on a multi-tab screen is a hold on the tab bar, and lives
-  // nowhere else.
   const char* confirmLabel;
   if (headerFocused) {
     confirmLabel = tr(STR_SYNC_ALL);

@@ -22,8 +22,7 @@ constexpr int ROW_FILTER_NAME = 2;
 constexpr int ROW_FILTER = 3;
 constexpr int ROW_FILTER2_NAME = 4;
 constexpr int ROW_FILTER2 = 5;
-constexpr int ROW_CLEAR = 6;
-constexpr int ROW_HINT = 7;
+constexpr int ROW_HINT = 6;
 }  // namespace
 
 void TodoistSettingsActivity::onEnter() {
@@ -157,12 +156,6 @@ void TodoistSettingsActivity::handleSelection() {
     return;
   }
 
-  if (selectedIndex == ROW_CLEAR) {
-    TODOIST_STORE.clearToken();
-    TODOIST_STORE.saveToFile();
-    LOG_DBG("TDS", "API token cleared");
-    requestUpdate(true);
-  }
   // ROW_HINT is a footnote, not an action.
 }
 
@@ -197,8 +190,6 @@ void TodoistSettingsActivity::render(RenderLock&&) {
             return std::string(I18n::getInstance().get(StrId::STR_TODOIST_FILTER_NAME)) + " 2";
           case ROW_FILTER2:
             return std::string(I18n::getInstance().get(StrId::STR_TODOIST_FILTER)) + " 2";
-          case ROW_CLEAR:
-            return std::string(I18n::getInstance().get(StrId::STR_CLEAR_BUTTON));
           default:
             return std::string(I18n::getInstance().get(StrId::STR_ORGANIZER_HOLD_TO_SYNC));
         }
