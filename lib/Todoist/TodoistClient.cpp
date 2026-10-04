@@ -99,7 +99,8 @@ struct TaskCollector {
   std::vector<TodoistTask>* out;
 };
 
-void collectTask(void* ctx, const char* id, const char* content, const char* dueDate, const bool isRecurring) {
+void collectTask(void* ctx, const char* id, const char* content, const char* dueDate, const bool isRecurring,
+                 const char* labels) {
   auto* collector = static_cast<TaskCollector*>(ctx);
   auto& out = *collector->out;
 
@@ -108,6 +109,7 @@ void collectTask(void* ctx, const char* id, const char* content, const char* due
   task.content = content;
   task.dueDays = todoist::dueDaysFromIso(dueDate);
   task.isRecurring = isRecurring;
+  task.labels = labels;
 
   if (out.size() < TODOIST_MAX_TASKS) {
     out.push_back(std::move(task));
@@ -143,8 +145,8 @@ void collectTask(void* ctx, const char* id, const char* content, const char* due
 }
 }  // namespace
 
-TodoistClient::Error TodoistClient::fetchTasks(freeink::SecureHttpClient& http, std::vector<TodoistTask>& outTasks,
-                                               std::string& outServerDate) {
+TodoistClient::Error TodoistClient::fetchTasks(freeink::SecureHttpClient& http, const std::string& filter,
+                                               std::vector<TodoistTask>& outTasks, std::string& outServerDate) {
   lastHttpCode = 0;
   outServerDate.clear();
   if (!TODOIST_STORE.hasToken()) {
@@ -160,8 +162,8 @@ TodoistClient::Error TodoistClient::fetchTasks(freeink::SecureHttpClient& http, 
 
   // std::string rather than a stack buffer: a filter is allowed 1,024 characters
   // and encoding can triple that, far past what belongs on this stack.
-  const std::string url = std::string(FILTER_URL_BASE) + urlEncode(TODOIST_STORE.getFilter());
-  LOG_DBG("TDA", "Filter query: %s", TODOIST_STORE.getFilter().c_str());
+  const std::string url = std::string(FILTER_URL_BASE) + urlEncode(filter);
+  LOG_DBG("TDA", "Filter query: %s", filter.c_str());
 
   if (!http.begin(url)) {
     LOG_ERR("TDA", "Bad filter URL");
@@ -272,9 +274,10 @@ TodoistClient::Error TodoistClient::rescheduleTask(freeink::SecureHttpClient& ht
 }
 
 TodoistClient::Error TodoistClient::fetchCompletedCountForDay(freeink::SecureHttpClient& http,
-                                                              const std::string& isoDate, uint16_t& outCount,
-                                                              const TodoistCompletedCountParser::TitleSink titleSink,
-                                                              void* titleSinkCtx) {
+                                                              const std::string& filter, const std::string& isoDate,
+                                                              uint16_t& outCount,
+                                                              const TodoistCompletedCountParser::ItemSink itemSink,
+                                                              void* itemSinkCtx) {
   lastHttpCode = 0;
   outCount = 0;
   if (!TODOIST_STORE.hasToken()) {
@@ -285,9 +288,9 @@ TodoistClient::Error TodoistClient::fetchCompletedCountForDay(freeink::SecureHtt
 
   const std::string url = std::string(COMPLETED_URL_BASE) + "?since=" + isoDate + "T00:00:00Z&until=" + isoDate +
                           "T23:59:59Z&limit=" + std::to_string(COMPLETED_PAGE_LIMIT) +
-                          "&filter_query=" + urlEncode(TODOIST_STORE.getFilter());
+                          "&filter_query=" + urlEncode(filter);
 
-  TodoistCompletedCountParser parser(titleSink, titleSinkCtx);
+  TodoistCompletedCountParser parser(itemSink, itemSinkCtx);
 
   if (!http.begin(url)) {
     LOG_ERR("TDA", "Bad completed-count URL");

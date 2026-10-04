@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "lib/Todoist/TodoistCompletedCountParser.h"
 
@@ -87,4 +88,33 @@ TEST(TodoistCompletedCountParserTest, ResetClearsCountAndError) {
   const char* body = R"({"items":[{"id":"x"}]})";
   parser.feed(body, strlen(body));
   EXPECT_EQ(parser.count(), 1u);
+}
+
+namespace {
+
+struct SeenItem {
+  std::string id;
+  std::string content;
+};
+
+void collectItem(void* ctx, const char* id, const char* content) {
+  static_cast<std::vector<SeenItem>*>(ctx)->push_back({id, content});
+}
+
+}  // namespace
+
+// The sink gets each item's task id along with its title, so a caller merging
+// two filters' completions can tell which are the same task.
+TEST(TodoistCompletedCountParserTest, SinkReceivesIdAndContent) {
+  std::vector<SeenItem> items;
+  TodoistCompletedCountParser parser(collectItem, &items);
+  const size_t len = strlen(kRealisticResponse);
+  for (size_t offset = 0; offset < len; offset += 7) {
+    parser.feed(kRealisticResponse + offset, std::min<size_t>(7, len - offset));
+  }
+
+  ASSERT_EQ(items.size(), 3u);
+  EXPECT_EQ(items[0].id, "6X4Vw2Hfmg73Q2XR");
+  EXPECT_EQ(items[0].content, "terminar fixes cup pong para release");
+  EXPECT_EQ(items[2].id, "6X4Vw2Hfmg73Q2XT");
 }

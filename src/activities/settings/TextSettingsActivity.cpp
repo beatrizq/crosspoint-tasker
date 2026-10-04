@@ -52,7 +52,7 @@ void TextSettingsActivity::onEnter() {
 
   metrics_ = UITheme::getInstance().getMetrics();
   afterHeader = metrics_.topPadding + metrics_.headerHeight + metrics_.verticalSpacing;
-  bottomReserved = metrics_.buttonHintsHeight + metrics_.verticalSpacing;
+  bottomReserved = metrics_.buttonHintsHeight + metrics_.buttonHintsGap;
   usableHeight = renderer.getScreenHeight() - afterHeader - bottomReserved;
   previewHeight = usableHeight * metrics_.previewHeightPercent / 100;
 

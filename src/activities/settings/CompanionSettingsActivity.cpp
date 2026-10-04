@@ -22,14 +22,13 @@
 
 namespace {
 constexpr int ROW_NICKNAME = 0;
-constexpr int ROW_ENABLED = 1;
-constexpr int ROW_SHOW_MOOD_LABEL = 2;
-constexpr int ROW_SLEEP_START = 3;
-constexpr int ROW_SLEEP_END = 4;
-constexpr int ROW_HAPPY_POINTS = 5;
-constexpr int ROW_SATISFIED_POINTS = 6;
-constexpr int ROW_NEGLECTED_DAYS = 7;
-constexpr int ROW_RESET = 8;
+constexpr int ROW_SLEEP_START = 1;
+constexpr int ROW_SLEEP_END = 2;
+constexpr int ROW_AMAZED_POINTS = 3;
+constexpr int ROW_HAPPY_POINTS = 4;
+constexpr int ROW_SATISFIED_POINTS = 5;
+constexpr int ROW_NEGLECTED_DAYS = 6;
+constexpr int ROW_RESET = 7;
 
 // "HH:MM" for a Sleep start/end row's value column -- digits need no
 // translation.
@@ -60,7 +59,6 @@ void CompanionSettingsActivity::onEnter() {
 void CompanionSettingsActivity::onExit() { Activity::onExit(); }
 
 void CompanionSettingsActivity::stampActivationIfNeeded() {
-  if (!SETTINGS.companionEnabled) return;
   if (COMPANION_STATE.activatedDay != companion::DayLedger::NEVER) return;
   int32_t today = 0;
   if (!CompanionTracker::resolveLocalDay(today)) return;
@@ -73,40 +71,14 @@ void CompanionSettingsActivity::handleSelection() {
     case ROW_NICKNAME:
       editSettingsText(tr(STR_NICKNAME_ENTER), SETTINGS.companionNickname, sizeof(SETTINGS.companionNickname));
       return;
-    case ROW_ENABLED: {
-      const bool turningOn = SETTINGS.companionEnabled == 0;
-      startActivityForResult(std::make_unique<ConfirmationActivity>(
-                                 renderer, mappedInput,
-                                 turningOn ? tr(STR_COMPANION_ENABLE_CONFIRM) : tr(STR_COMPANION_DISABLE_CONFIRM), ""),
-                             [this](const ActivityResult& result) {
-                               // The popup answers on the button going down, so its release lands
-                               // back here once this screen is active again -- same reasoning as
-                               // swallowConfirmRelease in onEnter(), just armed from this result
-                               // instead.
-                               if (mappedInput.isPressed(MappedInputManager::Button::Right2))
-                                 swallowConfirmRelease = true;
-                               if (result.isCancelled || mappedInput.isPressed(MappedInputManager::Button::Right1)) {
-                                 swallowBackRelease = true;
-                               }
-                               if (result.isCancelled) return;
-                               SETTINGS.companionEnabled = (SETTINGS.companionEnabled + 1) % 2;
-                               stampActivationIfNeeded();
-                               SETTINGS.saveToFile();
-                               requestUpdate();
-                             });
-      return;
-    }
-    case ROW_SHOW_MOOD_LABEL:
-      SETTINGS.companionShowMoodLabel = (SETTINGS.companionShowMoodLabel + 1) % 2;
-      break;
     case ROW_SLEEP_START:
     case ROW_SLEEP_END:
       startActivityForResult(
           std::make_unique<CompanionSleepTimeActivity>(renderer, mappedInput, selectedIndex == ROW_SLEEP_START),
           [this](const ActivityResult&) {
-            // Same reasoning as ROW_ENABLED's popup above: this sub-screen
-            // answers Back/Confirm on the button going down in places, so a
-            // release can still land here.
+            // This sub-screen answers Back/Confirm on the button going down
+            // in places, so a release can still land here once it's closed
+            // -- same reasoning as swallowConfirmRelease in onEnter().
             if (mappedInput.isPressed(MappedInputManager::Button::Right2)) {
               swallowConfirmRelease = true;
             }
@@ -116,6 +88,7 @@ void CompanionSettingsActivity::handleSelection() {
             requestUpdate();
           });
       return;
+    case ROW_AMAZED_POINTS:
     case ROW_HAPPY_POINTS:
     case ROW_SATISFIED_POINTS:
     case ROW_NEGLECTED_DAYS:
@@ -125,7 +98,9 @@ void CompanionSettingsActivity::handleSelection() {
       startActivityForResult(
           std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_COMPANION_RESET_CONFIRM), ""),
           [this](const ActivityResult& result) {
-            // Same reasoning as ROW_ENABLED's popup above.
+            // The popup answers on the button going down, so its release
+            // lands back here once this screen is active again -- same
+            // reasoning as swallowConfirmRelease in onEnter().
             if (mappedInput.isPressed(MappedInputManager::Button::Right2)) {
               swallowConfirmRelease = true;
             }
@@ -134,9 +109,9 @@ void CompanionSettingsActivity::handleSelection() {
             }
             if (result.isCancelled) return;
             COMPANION_STATE.reset();
-            // Immediately re-stamped rather than left at "Not yet": the
-            // companion is still enabled, so a reset should read as
-            // freshly active, not as if it had never been turned on.
+            // Immediately re-stamped rather than left at "Not yet" -- a
+            // reset should read as freshly active, not as if the companion
+            // had never been active at all.
             stampActivationIfNeeded();
             COMPANION_STATE.saveToFile();
             requestUpdate();
@@ -154,13 +129,22 @@ void CompanionSettingsActivity::offerThresholdPicker(const int row) {
   int maxValue = 1;
 
   switch (row) {
+    case ROW_AMAZED_POINTS:
+      titleId = StrId::STR_COMPANION_AMAZED_AT;
+      formatId = StrId::STR_COMPANION_POINTS_FORMAT;
+      initialValue = SETTINGS.companionAmazedPoints;
+      // Must stay above Happy's own bar, or the Amazed tier is unreachable.
+      minValue = static_cast<int>(SETTINGS.companionHappyPoints) + 1;
+      maxValue = 30;
+      break;
     case ROW_HAPPY_POINTS:
       titleId = StrId::STR_COMPANION_HAPPY_AT;
       formatId = StrId::STR_COMPANION_POINTS_FORMAT;
       initialValue = SETTINGS.companionHappyPoints;
-      // Must stay above Satisfied's own bar, or the Happy tier is unreachable.
+      // Must stay above Satisfied's own bar, or the Happy tier is unreachable,
+      // and below Amazed's, or Amazed swallows it.
       minValue = static_cast<int>(SETTINGS.companionSatisfiedPoints) + 1;
-      maxValue = 20;
+      maxValue = std::max(minValue, static_cast<int>(SETTINGS.companionAmazedPoints) - 1);
       break;
     case ROW_SATISFIED_POINTS:
       titleId = StrId::STR_COMPANION_SATISFIED_AT;
@@ -186,7 +170,7 @@ void CompanionSettingsActivity::offerThresholdPicker(const int row) {
                                                   minValue, maxValue, /*smallStep=*/1, /*largeStep=*/5, formatId,
                                                   /*readerActivity=*/false, /*ignoreInitialConfirmRelease=*/true),
       [this, row](const ActivityResult& result) {
-        // Same reasoning as ROW_ENABLED's popup above.
+        // Same reasoning as ROW_RESET's popup above.
         if (mappedInput.isPressed(MappedInputManager::Button::Right2)) {
           swallowConfirmRelease = true;
         }
@@ -199,6 +183,10 @@ void CompanionSettingsActivity::offerThresholdPicker(const int row) {
         // a defensive clamp rather than the primary guard -- kept in case the
         // paired field's value changed some other way while this was open.
         switch (row) {
+          case ROW_AMAZED_POINTS:
+            SETTINGS.companionAmazedPoints =
+                static_cast<uint8_t>(std::max(v, static_cast<int>(SETTINGS.companionHappyPoints) + 1));
+            break;
           case ROW_HAPPY_POINTS:
             SETTINGS.companionHappyPoints =
                 static_cast<uint8_t>(std::max(v, static_cast<int>(SETTINGS.companionSatisfiedPoints) + 1));
@@ -246,7 +234,7 @@ void CompanionSettingsActivity::loop() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   switch (handleListTouch(selectedIndex, MENU_ITEMS, contentTop, contentHeight, false)) {
     case ListTouchResult::Activated:
@@ -282,7 +270,7 @@ void CompanionSettingsActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_COMPANION), nullptr);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, MENU_ITEMS, selectedIndex,
@@ -290,14 +278,12 @@ void CompanionSettingsActivity::render(RenderLock&&) {
         switch (index) {
           case ROW_NICKNAME:
             return std::string(tr(STR_NICKNAME));
-          case ROW_ENABLED:
-            return std::string(tr(STR_COMPANION_ENABLED));
-          case ROW_SHOW_MOOD_LABEL:
-            return std::string(tr(STR_COMPANION_SHOW_MOOD_LABEL));
           case ROW_SLEEP_START:
             return std::string(tr(STR_COMPANION_SLEEP_START));
           case ROW_SLEEP_END:
             return std::string(tr(STR_COMPANION_SLEEP_END));
+          case ROW_AMAZED_POINTS:
+            return std::string(tr(STR_COMPANION_AMAZED_AT));
           case ROW_HAPPY_POINTS:
             return std::string(tr(STR_COMPANION_HAPPY_AT));
           case ROW_SATISFIED_POINTS:
@@ -313,14 +299,12 @@ void CompanionSettingsActivity::render(RenderLock&&) {
         switch (index) {
           case ROW_NICKNAME:
             return std::string(CompanionTracker::displayName());
-          case ROW_ENABLED:
-            return SETTINGS.companionEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-          case ROW_SHOW_MOOD_LABEL:
-            return SETTINGS.companionShowMoodLabel ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
           case ROW_SLEEP_START:
             return sleepTimeValue(SETTINGS.companionSleepStartHour, SETTINGS.companionSleepStartMinute);
           case ROW_SLEEP_END:
             return sleepTimeValue(SETTINGS.companionSleepEndHour, SETTINGS.companionSleepEndMinute);
+          case ROW_AMAZED_POINTS:
+            return thresholdValue(StrId::STR_COMPANION_POINTS_FORMAT, SETTINGS.companionAmazedPoints);
           case ROW_HAPPY_POINTS:
             return thresholdValue(StrId::STR_COMPANION_POINTS_FORMAT, SETTINGS.companionHappyPoints);
           case ROW_SATISFIED_POINTS:

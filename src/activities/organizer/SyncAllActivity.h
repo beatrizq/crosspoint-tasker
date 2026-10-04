@@ -1,5 +1,7 @@
 #pragma once
 #include <cstdint>
+#include <functional>
+#include <utility>
 
 #include "activities/Activity.h"
 #include "util/OrganizerSync.h"
@@ -7,11 +9,12 @@
 /**
  * Syncs every configured integration in one go, over one Wi-Fi association.
  *
- * Reached by holding the Settings button on the home screen. Each organizer
- * screen can already sync itself, but doing all four that way means associating
- * four times and rebooting between each - every one of those screens reboots on
- * exit to reclaim the Wi-Fi/TLS heap. Here the radio comes up once, the four
- * syncs run back to back through organizerSync, and the radio goes down once.
+ * Reached by focusing any screen's own status bar and pressing Select (see
+ * ActivityManager::goToSyncAll()). Each organizer screen can already sync
+ * itself, but doing all four that way means associating four times and
+ * rebooting between each - every one of those screens reboots on exit to
+ * reclaim the Wi-Fi/TLS heap. Here the radio comes up once, the four syncs
+ * run back to back through organizerSync, and the radio goes down once.
  *
  * Progress is shown per service as it goes, because these are network round
  * trips: a screen that said nothing for forty seconds would look hung. Each row
@@ -29,8 +32,15 @@
  */
 class SyncAllActivity final : public Activity {
  public:
-  explicit SyncAllActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("SyncAll", renderer, mappedInput) {}
+  // onReturn reopens whatever screen's own status bar sent the user here --
+  // a small lambda the caller builds at the moment it calls goToSyncAll(),
+  // since the calling Activity itself is destroyed the instant that call
+  // replaces it with this one (see ActivityManager::goToSyncAll()'s own
+  // comment). Defaults to nullptr, meaning "go Home" -- the original
+  // behavior, from when this screen only had the one caller.
+  explicit SyncAllActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                           std::function<void()> onReturn = nullptr)
+      : Activity("SyncAll", renderer, mappedInput), onReturn(std::move(onReturn)) {}
 
   void onEnter() override;
   void onExit() override;
@@ -64,4 +74,6 @@ class SyncAllActivity final : public Activity {
 
   bool wifiActivated = false;
   bool radioTornDown = false;
+
+  std::function<void()> onReturn;
 };

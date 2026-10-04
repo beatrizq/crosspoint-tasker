@@ -9,7 +9,7 @@
  * Arranges the apps on the home grid.
  *
  * Select picks a row up, Up and Down walk it through the list, Select puts it
- * down. Pick-up-and-move rather than swap-two because "put Habits first" should
+ * down. Pick-up-and-move rather than swap-two because "put Tasks first" should
  * be one gesture and not four, and rather than drag because a drag on e-ink
  * repaints the whole list for every pixel of travel.
  *

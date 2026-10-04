@@ -30,17 +30,18 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["lastSleepFromReader"] = lastSleepFromReader;
   doc["showBootScreen"] = showBootScreen;
   doc["lastSleepFromQuickPick"] = lastSleepFromQuickPick;
-  doc["quickPickText"] = quickPickText;
-  doc["quickPickItemId"] = quickPickItemId;
-  doc["quickPickIsHabit"] = quickPickIsHabit;
-  doc["quickPickPoolEmpty"] = quickPickPoolEmpty;
+  doc["todoistActiveFilter"] = todoistActiveFilter;
   doc["focusSessionActive"] = focusSessionActive;
   doc["focusSessionText"] = focusSessionText;
   doc["focusSessionItemId"] = focusSessionItemId;
-  doc["focusSessionIsHabit"] = focusSessionIsHabit;
   doc["focusSessionEndAbsMinutes"] = focusSessionEndAbsMinutes;
   doc["focusSessionEndHour"] = focusSessionEndHour;
   doc["focusSessionEndMinute"] = focusSessionEndMinute;
+  doc["companionSessionActive"] = companionSessionActive;
+  doc["companionSessionMood"] = companionSessionMood;
+  doc["companionSessionEndAbsMinutes"] = companionSessionEndAbsMinutes;
+  doc["companionSessionEndHour"] = companionSessionEndHour;
+  doc["companionSessionEndMinute"] = companionSessionEndMinute;
 }
 
 bool CrossPointState::fromJson(JsonVariantConst doc) {
@@ -64,16 +65,18 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   lastSleepFromReader = doc["lastSleepFromReader"] | false;
   showBootScreen = doc["showBootScreen"] | true;
   lastSleepFromQuickPick = doc["lastSleepFromQuickPick"] | false;
-  quickPickText = doc["quickPickText"] | "";
-  quickPickItemId = doc["quickPickItemId"] | "";
-  quickPickIsHabit = doc["quickPickIsHabit"] | false;
-  quickPickPoolEmpty = doc["quickPickPoolEmpty"] | false;
+  todoistActiveFilter = doc["todoistActiveFilter"] | static_cast<uint8_t>(0);
+  if (todoistActiveFilter > 1) todoistActiveFilter = 0;
   focusSessionActive = doc["focusSessionActive"] | false;
   focusSessionText = doc["focusSessionText"] | "";
   focusSessionItemId = doc["focusSessionItemId"] | "";
-  focusSessionIsHabit = doc["focusSessionIsHabit"] | false;
   focusSessionEndAbsMinutes = doc["focusSessionEndAbsMinutes"] | static_cast<int32_t>(0);
   focusSessionEndHour = doc["focusSessionEndHour"] | static_cast<uint8_t>(0);
   focusSessionEndMinute = doc["focusSessionEndMinute"] | static_cast<uint8_t>(0);
+  companionSessionActive = doc["companionSessionActive"] | false;
+  companionSessionMood = doc["companionSessionMood"] | static_cast<uint8_t>(0);
+  companionSessionEndAbsMinutes = doc["companionSessionEndAbsMinutes"] | static_cast<int32_t>(0);
+  companionSessionEndHour = doc["companionSessionEndHour"] | static_cast<uint8_t>(0);
+  companionSessionEndMinute = doc["companionSessionEndMinute"] | static_cast<uint8_t>(0);
   return true;
 }

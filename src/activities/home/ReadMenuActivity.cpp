@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <string>
 
 #include "MappedInputManager.h"
@@ -18,6 +19,7 @@ void ReadMenuActivity::onEnter() {
   buildEntries();
   recentBooks = recentBookLoader::load(1);
   selectedIndex = 0;
+  headerFocused = false;
   requestUpdate();
 }
 
@@ -53,7 +55,7 @@ void ReadMenuActivity::activateSelected() {
       activityManager.goToBrowser(/*returnToReadMenu=*/true);
       break;
     case HomeMenuItem::FILE_TRANSFER:
-      activityManager.goToFileTransfer(/*returnToReadMenu=*/true);
+      activityManager.goToFileTransfer(FileTransferReturn::ReadMenu);
       break;
     default:
       break;
@@ -69,6 +71,10 @@ void ReadMenuActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right2)) {
+    if (headerFocused) {
+      activityManager.goToSyncAll([] { activityManager.goToReadMenu(); });
+      return;
+    }
     activateSelected();
     return;
   }
@@ -149,23 +155,42 @@ void ReadMenuActivity::loop() {
 
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
+    // A swipe is a page-jump, not a single step, so it always leaves the
+    // header stop (if it was focused) -- same reasoning as
+    // OrganizerScreenActivity's own swipe handling.
+    headerFocused = false;
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, itemCount);
     requestUpdate();
     return;
   }
   if (swipe == MappedInputManager::SwipeDir::Down) {
+    headerFocused = false;
     selectedIndex = ButtonNavigator::previousIndex(selectedIndex, itemCount);
     requestUpdate();
     return;
   }
 
   buttonNavigator.onNext([this, itemCount] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, itemCount);
+    if (headerFocused) {
+      headerFocused = false;
+      selectedIndex = 0;
+    } else if (selectedIndex == itemCount - 1) {
+      headerFocused = true;
+    } else {
+      selectedIndex = ButtonNavigator::nextIndex(selectedIndex, itemCount);
+    }
     requestUpdate();
   });
 
   buttonNavigator.onPrevious([this, itemCount] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, itemCount);
+    if (headerFocused) {
+      headerFocused = false;
+      selectedIndex = itemCount - 1;
+    } else if (selectedIndex == 0) {
+      headerFocused = true;
+    } else {
+      selectedIndex = ButtonNavigator::previousIndex(selectedIndex, itemCount);
+    }
     requestUpdate();
   });
 }
@@ -177,7 +202,14 @@ void ReadMenuActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_MENU_READ), nullptr);
+  const Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  GUI.drawHeader(renderer, headerRect, tr(STR_MENU_READ), nullptr);
+  // Hovering the header (see headerFocused's own comment): a true pixel
+  // invert, the same technique QuickPickActivity's own header focus uses.
+  if (headerFocused) {
+    renderer.invertRect(headerRect.x, headerRect.y, headerRect.width,
+                        std::min(HEADER_FOCUS_HIGHLIGHT_HEIGHT, headerRect.height));
+  }
 
   int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
 
@@ -193,10 +225,11 @@ void ReadMenuActivity::render(RenderLock&&) {
   bool coverBufferStored = false;
   bool bufferRestored = false;
   GUI.drawRecentBookCover(renderer, Rect{0, contentTop, pageWidth, metrics.homeCoverTileHeight}, recentBooks,
-                          selectedIndex, coverRendered, coverBufferStored, bufferRestored, [] { return false; });
+                          headerFocused ? -1 : selectedIndex, coverRendered, coverBufferStored, bufferRestored,
+                          [] { return false; });
   contentTop += metrics.homeCoverTileHeight + metrics.menuSpacing;
 
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   const auto& rows = entries;
   GUI.drawButtonMenu(
@@ -205,7 +238,8 @@ void ReadMenuActivity::render(RenderLock&&) {
 
   // Back always calls onGoHome() (see this file's own Back handler) rather
   // than returning to a caller, so the hint says Home, not Back.
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), headerFocused ? tr(STR_SYNC_ALL) : tr(STR_SELECT),
+                                            tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

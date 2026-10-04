@@ -33,6 +33,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .homeGridColumns = 0,
                                  .homeGridTileHeight = 0,
                                  .buttonHintsHeight = 40,
+                                 .buttonHintsGap = 8,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
                                  .progressBarMarginTop = 1,
@@ -78,7 +79,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
 class RoundedRaffTheme : public BaseTheme {
  public:
   void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr,
-                  bool showRule = true) const override;
+                  bool showRule = true, bool includeStatusRow = true) const override;
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
                   bool selected) const override;
   bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,

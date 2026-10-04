@@ -42,7 +42,7 @@ void LanguageSelectActivity::loop() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
   switch (handleListTouch(selectedIndex, totalItems, contentTop, contentHeight, false)) {
     case ListTouchResult::Activated:
       activateSelected();
@@ -114,7 +114,7 @@ void LanguageSelectActivity::render(RenderLock&&) {
 
   // Current language marker
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
   const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,

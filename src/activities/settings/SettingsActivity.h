@@ -19,8 +19,6 @@ enum class SettingAction {
   KOReaderSync,
   Todoist,
   GoogleCalendar,
-  Ynab,
-  Habitify,
   Companion,
   AppOrder,
   OPDSBrowser,
@@ -28,12 +26,20 @@ enum class SettingAction {
   ClearCache,
   CheckForUpdates,
   SdFirmwareUpdate,
+  FileTransfer,
   Language,
   DownloadFonts,
   TextSettings,
   ClockOffset,
   ClockSync,
+  ControlsMenu,
+  LibraryMenu,
 };
+
+// A group of settings. The tab bar shows Display, Reader, System and Organizer;
+// Controls and Library are submenus opened from the Reader tab, each shown by its
+// own SettingsActivity with just that group (a one-tab bar, Back returns).
+enum class SettingsBucket : uint8_t { None, Display, Reader, Controls, Library, System, Organizer };
 
 struct SettingInfo {
   StrId nameId;
@@ -164,10 +170,16 @@ class SettingsActivity final : public Activity {
   int selectedCategoryIndex = 0;  // Currently selected category
   int selectedSettingIndex = 0;
   int settingsCount = 0;
+  // An extra stop bolted onto selectedSettingIndex, ahead of its own existing
+  // "0 == tab bar" stop -- the same idiom OrganizerScreenActivity's own
+  // headerFocused uses, just one level higher up: header, then tab bar
+  // (categories), then setting rows.
+  bool headerFocused = false;
 
   // Per-category settings derived from shared list + device-only actions
   std::vector<SettingInfo> displaySettings;
   std::vector<SettingInfo> readerSettings;
+  std::vector<SettingInfo> librarySettings;
   std::vector<SettingInfo> controlsSettings;
   std::vector<SettingInfo> systemSettings;
   std::vector<SettingInfo> organizerSettings;
@@ -178,23 +190,15 @@ class SettingsActivity final : public Activity {
   // Set only by SettingAction::Network -- every other row here opens its own
   // activity, which owns its own WiFi/reboot lifecycle if it needs one.
   bool wifiActivated = false;
-  // Side Up/Down jump to the previous/next app in the home grid's own order
-  // -- the same shortcut every other app screen has (see
-  // OrganizerScreenActivity/QuickPickActivity's own identical block).
-  // Category-switching (this screen's own tab bar) is still reachable by
-  // navigating up to it and cycling with Confirm. Guarded by a fresh-press
-  // check, same reasoning as OrganizerScreenActivity's own upPressSeen/
-  // downPressSeen: a hold begun elsewhere should not fire an unintended jump
-  // the moment it is finally released here.
-  bool upPressSeen = false;
-  bool downPressSeen = false;
 
   OptionPopup optionPopup;
 
-  static constexpr int categoryCount = 5;
-  static const StrId categoryNames[categoryCount];
+  // The groups on the tab bar, in order -- all four, or just one in a submenu.
+  std::vector<SettingsBucket> tabBuckets;
+  bool isSubmenu = false;
+  int categoryCount() const { return static_cast<int>(tabBuckets.size()); }
+  static StrId bucketName(SettingsBucket bucket);
 
-  void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
   void rebuildSettingsLists();
@@ -203,8 +207,16 @@ class SettingsActivity final : public Activity {
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
  public:
-  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("Settings", renderer, mappedInput) {}
+  // `only`: show just that group (a submenu); None shows the whole tab bar.
+  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                            SettingsBucket only = SettingsBucket::None)
+      : Activity("Settings", renderer, mappedInput), isSubmenu(only != SettingsBucket::None) {
+    if (isSubmenu) {
+      tabBuckets = {only};
+    } else {
+      tabBuckets = {SettingsBucket::Display, SettingsBucket::Reader, SettingsBucket::System, SettingsBucket::Organizer};
+    }
+  }
   void onEnter() override;
   void onExit() override;
   void loop() override;

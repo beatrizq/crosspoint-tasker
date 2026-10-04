@@ -119,7 +119,7 @@ void EpubReaderMenuActivity::loop() {
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int contentTop =
       screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-  const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
+  const int contentHeight = screen.height - contentTop - metrics.buttonHintsGap;
   switch (handleListTouch(selectedIndex, static_cast<int>(menuItems.size()), contentTop, contentHeight, false)) {
     case ListTouchResult::Activated:
       activateSelected();
@@ -184,7 +184,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
 
   const int contentTop =
       screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-  const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
+  const int contentHeight = screen.height - contentTop - metrics.buttonHintsGap;
 
   GUI.drawList(
       renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, menuItems.size(), selectedIndex,

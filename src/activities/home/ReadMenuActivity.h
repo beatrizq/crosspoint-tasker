@@ -58,4 +58,10 @@ class ReadMenuActivity final : public Activity {
   // ActivityManager::goToReadMenu()), and re-deriving it here is cheap.
   std::vector<RecentBook> recentBooks;
   int selectedIndex = 0;
+  // An extra stop bolted onto selectedIndex, the same idiom
+  // OrganizerScreenActivity's own headerFocused uses: "previous" from
+  // selectedIndex == 0 lands here instead of wrapping to the last entry,
+  // "next" from here returns to selectedIndex == 0, "previous" from here
+  // wraps to the last entry. Right2 here opens Sync All.
+  bool headerFocused = false;
 };

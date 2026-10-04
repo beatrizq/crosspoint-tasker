@@ -32,7 +32,7 @@ struct BleNotificationEntry {
  * a stale entry here simply ages out on its own once CAPACITY more arrive.
  *
  * Persisted like every other Home-badge data source (TodoistTaskCache,
- * HabitifyHabitCache, ...): SyncAllActivity reboots the device on exit
+ * GCalEventCache, ...): SyncAllActivity reboots the device on exit
  * whenever WiFi was activated, so an in-RAM-only queue (and its unread badge)
  * would silently reset on every sync otherwise.
  */

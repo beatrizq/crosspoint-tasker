@@ -200,7 +200,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     sleepScreenValues[CrossPointSettings::COVER_CUSTOM] = StrId::STR_COVER_CUSTOM;
     sleepScreenValues[CrossPointSettings::BLANK] = StrId::STR_NONE_OPT;
     sleepScreenValues[CrossPointSettings::QUICK_RESUME] = StrId::STR_QUICK_RESUME;
-    sleepScreenValues[CrossPointSettings::DYNAMIC] = StrId::STR_DYNAMIC_SLEEP_SCREEN;
 
     std::vector<StrId> statusBarClockValues(CrossPointSettings::STATUS_BAR_CLOCK_MODE_COUNT);
     statusBarClockValues[CrossPointSettings::STATUS_BAR_CLOCK_HIDE] = StrId::STR_HIDE;
@@ -216,16 +215,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
                           {StrId::STR_NONE_OPT, StrId::STR_FILTER_CONTRAST, StrId::STR_INVERTED},
                           "sleepScreenCoverFilter", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_QUICK_RESUME_TIMEOUT, &CrossPointSettings::quickResumeSleepScreen,
-                          {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "quickResumeSleepScreen",
-                          StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
-                          {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
-                          StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(
-            StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
-            {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
-            "refreshFrequency", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Toggle(StrId::STR_INVERT_SLEEP_SCREEN, &CrossPointSettings::sleepScreenInvert, "sleepScreenInvert",
+                            StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_ORGANIZER_FONT_SIZE, &CrossPointSettings::organizerFontSize,
                           {StrId::STR_SIZE_SMALL, StrId::STR_SIZE_LARGE}, "organizerFontSize",
                           StrId::STR_CAT_ORGANIZER),
@@ -237,10 +228,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             StrId::STR_CAT_DISPLAY),
 
         // --- Companion (persisted here, rendered by its own dedicated screen) ---
-        SettingInfo::Toggle(StrId::STR_COMPANION_ENABLED, &CrossPointSettings::companionEnabled, "companionEnabled",
-                            StrId::STR_COMPANION),
-        SettingInfo::Toggle(StrId::STR_COMPANION_SHOW_MOOD_LABEL, &CrossPointSettings::companionShowMoodLabel,
-                            "companionShowMoodLabel", StrId::STR_COMPANION),
+        // No enabled/disabled toggle -- the companion's screen is Home (see
+        // ActivityManager::goHome()), so it is always active. No mood-label
+        // toggle either -- the mood label itself was removed from that screen.
         // Sleep window, local wall-clock time -- rendered on-device as two HH:MM
         // rows (CompanionSettingsActivity), but persisted here as four plain
         // bytes since that is what toJson()/fromJson() walk by key.
@@ -251,9 +241,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Value(StrId::STR_COMPANION_SLEEP_END_HOUR, &CrossPointSettings::companionSleepEndHour, {0, 23, 1},
                            "companionSleepEndHour", StrId::STR_COMPANION),
         // Mood ladder tuning. Independent per-field ranges are all the generic
-        // toJson()/fromJson() loop can enforce -- the happyPoints > satisfied-
-        // Points cross-field constraint can't be expressed here, so
+        // toJson()/fromJson() loop can enforce -- the satisfiedPoints < happyPoints <
+        // amazedPoints cross-field constraints can't be expressed here, so
         // CompanionTracker clamps again defensively wherever these are read.
+        SettingInfo::Value(StrId::STR_COMPANION_AMAZED_AT, &CrossPointSettings::companionAmazedPoints, {2, 30, 1},
+                           "companionAmazedPoints", StrId::STR_COMPANION),
         SettingInfo::Value(StrId::STR_COMPANION_HAPPY_AT, &CrossPointSettings::companionHappyPoints, {1, 20, 1},
                            "companionHappyPoints", StrId::STR_COMPANION),
         SettingInfo::Value(StrId::STR_COMPANION_SATISFIED_AT, &CrossPointSettings::companionSatisfiedPoints, {1, 20, 1},
@@ -308,6 +300,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                           {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                           "imageRendering", StrId::STR_CAT_READER),
+        SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
+                          {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
+                          StrId::STR_CAT_READER),
+        SettingInfo::Enum(
+            StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
+            {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
+            "refreshFrequency", StrId::STR_CAT_READER),
         // --- Controls ---
         SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                           {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED}, "sideButtonLayout",
@@ -323,10 +322,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
                           {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION, StrId::STR_DICTIONARY},
                           "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
-        SettingInfo::Enum(
-            StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
-            "shortPwrBtn", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
@@ -337,12 +332,23 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeoutMinutes,
             {CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES, CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1},
             "sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM),
+        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
+                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
+                           StrId::STR_FOOTNOTES, StrId::STR_QUICK_RESUME},
+                          "shortPwrBtn", StrId::STR_CAT_SYSTEM),
+        // A short press already covers Quick Resume for the manual-sleep case
+        // (shortPwrBtn's own value above); this is the automatic,
+        // inactivity-timeout case's equivalent choice.
+        SettingInfo::Enum(StrId::STR_TIMEOUT, &CrossPointSettings::timeoutSleepScreen,
+                          {StrId::STR_SLEEP, StrId::STR_QUICK_RESUME}, "timeoutSleepScreen", StrId::STR_CAT_SYSTEM),
+
+        // --- Library ---
         SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
-                            StrId::STR_CAT_SYSTEM),
+                            StrId::STR_CAT_LIBRARY),
         SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS, &CrossPointSettings::removeReadBooksFromRecents,
-                            "removeReadBooksFromRecents", StrId::STR_CAT_SYSTEM),
+                            "removeReadBooksFromRecents", StrId::STR_CAT_LIBRARY),
         SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,
-                            "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM),
+                            "moveFinishedToReadFolder", StrId::STR_CAT_LIBRARY),
 
         // Per-app nicknames: persisted + web-exposed, category-less so they stay
         // out of the on-device Settings list (edited from each app's own screen).
@@ -350,10 +356,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "tasksNickname"),
         SettingInfo::String(StrId::STR_NICKNAME, &SETTINGS.calendarNickname[0], sizeof(SETTINGS.calendarNickname),
                             "calendarNickname"),
-        SettingInfo::String(StrId::STR_NICKNAME, &SETTINGS.budgetNickname[0], sizeof(SETTINGS.budgetNickname),
-                            "budgetNickname"),
-        SettingInfo::String(StrId::STR_NICKNAME, &SETTINGS.habitsNickname[0], sizeof(SETTINGS.habitsNickname),
-                            "habitsNickname"),
         SettingInfo::String(StrId::STR_NICKNAME, &SETTINGS.companionNickname[0], sizeof(SETTINGS.companionNickname),
                             "companionNickname"),
 
@@ -459,7 +461,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     };
     // Only show tilt page turn setting when the QMI8658 IMU is present (X3)
     if (halTiltSensor.isAvailable()) {
-      // Insert after the short power button setting (end of Controls section)
+      // Insert next to the short power button setting; it belongs to Controls.
       for (auto it = v.begin(); it != v.end(); ++it) {
         if (it->nameId == StrId::STR_SHORT_PWR_BTN) {
           v.insert(it + 1, SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,

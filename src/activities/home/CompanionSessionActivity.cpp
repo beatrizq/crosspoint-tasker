@@ -1,4 +1,4 @@
-#include "FocusSessionActivity.h"
+#include "CompanionSessionActivity.h"
 
 #include <CompanionMood.h>
 #include <GfxRenderer.h>
@@ -7,7 +7,7 @@
 
 #include <cstdio>
 #include <memory>
-#include <vector>
+#include <string>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -19,22 +19,22 @@
 #include "fontIds.h"
 
 namespace {
-// Same layout constants QuickPickActivity's own bubble+companion screen
-// uses -- this is the locked lead-in to exactly that screen.
+// Same layout constants FocusSessionActivity's own bubble+companion screen
+// uses -- this is that same locked lead-in shape, just for a moodless,
+// itemless session (see this file's own header comment).
 constexpr int MAX_SCALE = 6;
 constexpr int PAD = 14;
 constexpr int TAIL_LENGTH = 16;
 constexpr int BUBBLE_GAP = 4;
 constexpr int MARGIN = 24;
-// Between the character's feet and the "until hh:mm" line.
+// Between the character's feet and the "Until hh:mm" line.
 constexpr int UNTIL_GAP = 4;
-// Floor on the bubble's text column, so a one-word task name still leaves
-// room for the tail and rounded corners rather than shrinking to fit it
-// exactly.
+// Floor on the bubble's text column -- "Focus"/"Break" are both short, but
+// this keeps the bubble from shrinking to an awkward sliver either way.
 constexpr int MIN_BUBBLE_TEXT_WIDTH = 80;
 }  // namespace
 
-void FocusSessionActivity::onEnter() {
+void CompanionSessionActivity::onEnter() {
   Activity::onEnter();
 
   uint16_t year;
@@ -55,41 +55,40 @@ void FocusSessionActivity::onEnter() {
     // Nothing to time against, or the session's end time already passed --
     // including a boot resume that landed after it elapsed while the device
     // was off. Clear the persisted session so a later reboot doesn't think
-    // one is still running; loop() hands off to the item's own companion
-    // screen on its very next call, before any of this screen ever paints.
-    APP_STATE.focusSessionActive = false;
+    // one is still running; loop() hands off to the Companion screen on its
+    // very next call, before any of this screen ever paints.
+    APP_STATE.companionSessionActive = false;
     APP_STATE.saveToFile();
     return;
   }
 
   sessionEndMillis = millis() + static_cast<unsigned long>(remainingMinutes) * 60000UL;
 
-  APP_STATE.focusSessionActive = true;
-  APP_STATE.focusSessionText = text;
-  APP_STATE.focusSessionItemId = itemId;
-  APP_STATE.focusSessionEndAbsMinutes = endAbsMinutes;
-  APP_STATE.focusSessionEndHour = endHourUtc;
-  APP_STATE.focusSessionEndMinute = endMinuteUtc;
+  APP_STATE.companionSessionActive = true;
+  APP_STATE.companionSessionMood = static_cast<uint8_t>(mood);
+  APP_STATE.companionSessionEndAbsMinutes = endAbsMinutes;
+  APP_STATE.companionSessionEndHour = endHourUtc;
+  APP_STATE.companionSessionEndMinute = endMinuteUtc;
   APP_STATE.saveToFile();
 
   requestUpdate(true);
 }
 
-void FocusSessionActivity::loop() {
+void CompanionSessionActivity::loop() {
   if (locked) {
     if (millis() < sessionEndMillis)
       return;  // still counting down -- Back/Home are swallowed above, nothing else to do
     locked = false;
-    APP_STATE.focusSessionActive = false;
+    APP_STATE.companionSessionActive = false;
     APP_STATE.saveToFile();
   }
   // Unlocked, either just now or already at onEnter(): hand off to the
-  // companion's own screen, which opens the task's Select menu again -- it may
-  // well be done now.
-  activityManager.replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInput, itemId));
+  // companion's own screen -- never auto-chains into the other kind of
+  // session (see this file's own header comment).
+  activityManager.replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInput));
 }
 
-void FocusSessionActivity::render(RenderLock&&) {
+void CompanionSessionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -105,12 +104,11 @@ void FocusSessionActivity::render(RenderLock&&) {
   const int maxTextWidth = contentWidth - PAD * 2;
 
   const auto id = CompanionTracker::activeId();
-  // The Focus pose for the whole session, not the live mood -- temporary by
-  // construction: the QuickPickActivity this hands off to when the countdown
-  // ends reads the live mood again.
-  const auto mood = companion::Mood::Focus;
+  const std::string bubbleText =
+      mood == companion::Mood::Focus ? tr(STR_COMPANION_SIDE_FOCUS) : tr(STR_COMPANION_SIDE_BREAK);
 
-  const auto textFit = companion::fitBubbleText(renderer, UI_10_FONT_ID, text, maxTextWidth, MIN_BUBBLE_TEXT_WIDTH, 4);
+  const auto textFit =
+      companion::fitBubbleText(renderer, UI_10_FONT_ID, bubbleText, maxTextWidth, MIN_BUBBLE_TEXT_WIDTH, 4);
   const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
   const int bubbleH = static_cast<int>(textFit.lines.size()) * lineH + PAD * 2;
   const int bubbleBlock = bubbleH + TAIL_LENGTH + BUBBLE_GAP;
@@ -120,7 +118,7 @@ void FocusSessionActivity::render(RenderLock&&) {
   HalClock::formatHourMinute(untilTime, sizeof(untilTime), endHourUtc, endMinuteUtc, SETTINGS.clockUtcOffsetQ,
                              SETTINGS.clockFormat == 1);
   char untilLine[48];
-  snprintf(untilLine, sizeof(untilLine), tr(STR_FOCUS_SESSION_UNTIL), untilTime);
+  snprintf(untilLine, sizeof(untilLine), tr(STR_COMPANION_SESSION_UNTIL), untilTime);
   // Same size as the header's own title, so this reads as a second line of
   // header rather than incidental caption text.
   const int untilLineH = renderer.getLineHeight(UI_12_FONT_ID);

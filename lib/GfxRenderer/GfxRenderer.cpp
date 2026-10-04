@@ -1537,6 +1537,17 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
+void GfxRenderer::invertRect(const int x, const int y, const int w, const int h) const {
+  const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
+  if (!mem.valid) return;
+
+  const size_t rowBytes = mem.w / 8;  // exact: mem.w is a multiple of 8
+  for (uint16_t row = 0; row < mem.h; ++row) {
+    uint8_t* rowPtr = frameBuffer + (static_cast<uint32_t>(mem.y + row) * panelWidthBytes) + (mem.x / 8);
+    for (size_t b = 0; b < rowBytes; ++b) rowPtr[b] = ~rowPtr[b];
+  }
+}
+
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
@@ -2041,6 +2052,38 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
     renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
     prevCp = cp;
+  }
+}
+
+int GfxRenderer::getTextStackedHeight(const int fontId, const char* text, const int lineAdvance) const {
+  if (text == nullptr || *text == '\0') return 0;
+
+  int lineCount = 0;
+  const auto* p = reinterpret_cast<const unsigned char*>(text);
+  while (*p != '\0') {
+    utf8NextCodepoint(&p);
+    lineCount++;
+  }
+  return lineCount * (lineAdvance > 0 ? lineAdvance : getLineHeight(fontId));
+}
+
+void GfxRenderer::drawTextStacked(const int fontId, const int centerX, const int centerY, const char* text,
+                                  const int lineAdvance, const bool black, const EpdFontFamily::Style style) const {
+  if (text == nullptr || *text == '\0') return;
+
+  const int lineH = lineAdvance > 0 ? lineAdvance : getLineHeight(fontId);
+  int lineY = centerY - getTextStackedHeight(fontId, text, lineAdvance) / 2;
+
+  const auto* p = reinterpret_cast<const unsigned char*>(text);
+  while (*p != '\0') {
+    const auto* before = p;
+    utf8NextCodepoint(&p);
+    const size_t len = static_cast<size_t>(p - before);
+    char glyph[5] = {'\0', '\0', '\0', '\0', '\0'};  // UTF-8 codepoints are at most 4 bytes
+    for (size_t i = 0; i < len && i < 4; i++) glyph[i] = static_cast<char>(before[i]);
+    const int glyphWidth = getTextWidth(fontId, glyph, style);
+    drawText(fontId, centerX - glyphWidth / 2, lineY, glyph, black, style);
+    lineY += lineH;
   }
 }
 

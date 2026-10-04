@@ -23,6 +23,11 @@ class FileBrowserActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   size_t selectorIndex = 0;
+  // An extra stop bolted onto selectorIndex, the same idiom
+  // OrganizerScreenActivity's own headerFocused uses -- Books mode only (see
+  // loop()'s own comment): a firmware/image picker is a narrow, single-
+  // purpose flow with no reason to reach Sync All from it.
+  bool headerFocused = false;
 
   bool lockLongPressBack = false;
   // True when this activity was entered while Confirm was already held; we must swallow the next

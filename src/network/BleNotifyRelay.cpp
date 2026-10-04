@@ -185,6 +185,36 @@ size_t unescapeGadgetbridgeEscapes(char* buf, const size_t len) {
   return writeIdx;
 }
 
+// Defined further down with the other device->phone senders.
+void sendNotifyAck(uint32_t id);
+
+// Notification ids awaiting an ack send, drained from poll() -- see
+// queueNotifyAck()'s own comment for why this exists instead of acking
+// synchronously from inside onWrite().
+constexpr size_t MAX_PENDING_ACKS = 8;
+uint32_t pendingAcks[MAX_PENDING_ACKS];
+size_t pendingAckCount = 0;
+
+// Queues `id` for poll() to ack on its next call, rather than calling
+// sendNotifyAck() (a NimBLE notify(), i.e. a fresh outbound GATT operation)
+// synchronously from here. This runs inside WriteCallbacks::onWrite(), i.e.
+// on the NimBLE host task's own callback dispatch -- every other outbound
+// send in this file (sendBatteryStatus()) runs only from poll(), on the
+// Arduino main task, and that split is deliberate: issuing a new GATT
+// operation back-to-back, synchronously, from inside the host task's own
+// write-callback risks wedging that task, which would explain a connection
+// that looks fine from the device's own side (nothing ever triggered
+// onDisconnect()) while the phone times out waiting on it and reports
+// disconnected. A full queue drops the oldest pending ack rather than the
+// newest -- the newest is the one most likely to still be relevant.
+void queueNotifyAck(const uint32_t id) {
+  if (pendingAckCount >= MAX_PENDING_ACKS) {
+    memmove(pendingAcks, pendingAcks + 1, (MAX_PENDING_ACKS - 1) * sizeof(uint32_t));
+    pendingAckCount = MAX_PENDING_ACKS - 1;
+  }
+  pendingAcks[pendingAckCount++] = id;
+}
+
 // Handles one fully-reassembled, unescaped command. Anything other than a
 // GB({...}) JSON call is some other Espruino snippet Gadgetbridge also sends
 // (setTime(...), storage writes, ...) -- nothing here to parse, and nothing
@@ -219,6 +249,11 @@ void processCommand(char* buf, size_t len) {
     BLE_NOTIFICATIONS.push(id, false, src, title, body, hour, minute);
     BLE_NOTIFICATIONS.saveToFile();
     LOG_INF("BLE", "Notification from %s: %s: %s", src, title, body);
+    // Tell the phone this one is stored, so it stops sending it again. Queued
+    // rather than sent here -- see queueNotifyAck()'s own comment -- after the
+    // queue is saved, and also when push() found it already held (a resend of
+    // something the device has): either way the device has it.
+    queueNotifyAck(id);
   } else if (strcmp(type, "call") == 0) {
     const char* cmd = doc["cmd"] | "";
     if (strcmp(cmd, "incoming") == 0) {
@@ -439,6 +474,26 @@ void sendBatteryStatus() {
   notifyChunked(buf, static_cast<size_t>(len));
 }
 
+// The delivery receipt for a stored notification: the patched Gadgetbridge
+// ("notifyAck", see BangleJSDeviceSupport) stops forwarding that notification
+// once it has this, and forwards anything never acked again on the next
+// reconnect -- the way a notification the device missed (asleep, out of range,
+// a lost write) gets a second chance without ones it already has repeating.
+// CRLF-terminated for the same reason sendBatteryStatus() is. id 0 is what a
+// notification without an id parses to, and cannot be matched to anything, so
+// there is nothing to confirm.
+void sendNotifyAck(const uint32_t id) {
+  if (notifyCharacteristic == nullptr || id == 0) return;
+  char buf[48];
+  const int len = snprintf(buf, sizeof(buf), "{\"t\":\"notifyAck\",\"id\":%lu}\r\n", static_cast<unsigned long>(id));
+  if (len <= 0 || static_cast<size_t>(len) >= sizeof(buf)) {
+    LOG_ERR("BLE", "Notification ack truncated or encoding failed");
+    return;
+  }
+  notifyChunked(buf, static_cast<size_t>(len));
+  LOG_INF("BLE", "Sent delivery ack for notification %lu", static_cast<unsigned long>(id));
+}
+
 }  // namespace
 
 void BleNotifyRelay::begin() { bringUp(); }
@@ -493,6 +548,16 @@ void BleNotifyRelay::resume() {
 }
 
 void BleNotifyRelay::poll() {
+  // Drained every call, not gated like the status log below: an ack is only
+  // useful to the phone promptly, and this is cheap (a handful of pending ids
+  // at most -- see MAX_PENDING_ACKS). This is also the only place
+  // sendNotifyAck() (a real GATT notify()) actually runs, deliberately never
+  // from inside onWrite() -- see queueNotifyAck()'s own comment.
+  if (pendingAckCount > 0 && notifyCharacteristic != nullptr) {
+    for (size_t i = 0; i < pendingAckCount; i++) sendNotifyAck(pendingAcks[i]);
+    pendingAckCount = 0;
+  }
+
   static unsigned long lastStatusLog = 0;
   const unsigned long now = millis();
   if (now - lastStatusLog < 10000) return;

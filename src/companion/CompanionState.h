@@ -22,14 +22,6 @@ class CompanionState : public PersistableStore<CompanionState> {
 
  public:
   companion::DayLedger ledger;
-  // Local day number the best-ever single-day tasks+habits total was last
-  // beaten on. The companion reads as the Milestone mood for the rest of that
-  // day (see CompanionTracker::currentMood()) rather than for one paint only,
-  // so Home, the sleep screen, and anywhere else that asks all agree without
-  // needing to coordinate over who gets to consume a one-shot flag; it just
-  // stops matching once the day rolls past it, on its own.
-  // companion::DayLedger::NEVER until a record has ever been beaten.
-  int32_t milestoneDay = companion::DayLedger::NEVER;
   // Local day number the companion was first ever enabled, for the settings
   // screen's "active for" display. companion::DayLedger::NEVER until then.
   // Stamped once and never moved, even if the companion is later disabled and
@@ -41,7 +33,7 @@ class CompanionState : public PersistableStore<CompanionState> {
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);
 
-  // Credits today's combined tasks+habits effort into the ledger. `localDay`
+  // Credits today's completed tasks into the ledger. `localDay`
   // is ignored (no ledger update) when clockValid is false, since day
   // arithmetic would be meaningless without a real calendar day to key it to.
   // `thresholds` only matters for its satisfiedPoints -- the "qualifying day"
@@ -49,18 +41,17 @@ class CompanionState : public PersistableStore<CompanionState> {
   // whatever bar evaluate() is using for the same day; the caller is expected
   // to already have it clamped (see CompanionTracker::thresholdsFromSettings).
   // Returns true when something changed and the caller should persist.
-  bool recordActivity(int32_t localDay, bool clockValid, uint16_t tasksCompletedToday, uint16_t habitsCompletedToday,
+  bool recordActivity(int32_t localDay, bool clockValid, uint16_t tasksCompletedToday,
                       const companion::MoodThresholds& thresholds = {});
 
   // Clears everything earned back to a companion that has never done
-  // anything: the day-qualifying marker, the best-day-points record, the
-  // milestone flag, and the activation date -- an explicit override of
+  // anything: the day-qualifying marker and the activation date -- an explicit override of
   // activatedDay's usual "stamped once, never moved" rule, for a user who
   // wants a clean slate (repeated testing, a device changing hands, etc.).
   // Caller's job to persist and to re-stamp activatedDay if the companion is
   // still enabled (see CompanionSettingsActivity::stampActivationIfNeeded).
-  // Does not touch today's live task/habit counts -- those are read fresh
-  // from their own caches, never stored here.
+  // Does not touch today's live task count -- that is read fresh from its
+  // own cache, never stored here.
   void reset();
 };
 

@@ -13,19 +13,14 @@
 #include "browser/OpdsBookBrowserActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
-#include "home/HomeActivity.h"
 #include "home/ReadMenuActivity.h"
 #include "home/RecentBooksActivity.h"
 #include "network/CrossPointWebServerActivity.h"
-#include "util/ScreenshotUtil.h"
 #ifdef ENABLE_BLE_NOTIFY_SPIKE
 #include "network/BleNotificationsActivity.h"
 #endif
-#include "companion/QuickPickRoll.h"
 #include "home/QuickPickActivity.h"
-#include "organizer/BudgetActivity.h"
 #include "organizer/CalendarActivity.h"
-#include "organizer/HabitsActivity.h"
 #include "organizer/SyncAllActivity.h"
 #include "organizer/TasksActivity.h"
 #include "reader/ReaderActivity.h"
@@ -80,7 +75,7 @@ void ActivityManager::renderTaskLoop() {
 
 void ActivityManager::loop() {
   if (currentActivity) {
-    if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
+    if (!currentActivity->isQuickPickActivity() && mappedInput.wasHomeGesture()) {
       if (currentActivity->handleHomeGesture()) {
         return;
       }
@@ -198,8 +193,8 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
   }
 }
 
-void ActivityManager::goToFileTransfer(const bool returnToReadMenu) {
-  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, returnToReadMenu));
+void ActivityManager::goToFileTransfer(const FileTransferReturn returnTo) {
+  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, returnTo));
 }
 
 void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
@@ -220,21 +215,15 @@ void ActivityManager::goToTasks(const uint8_t initialTab, std::string selectTask
 
 void ActivityManager::goToCalendar() { replaceActivity(std::make_unique<CalendarActivity>(renderer, mappedInput)); }
 
-void ActivityManager::goToHabits(std::string selectHabitId) {
-  replaceActivity(std::make_unique<HabitsActivity>(renderer, mappedInput, std::move(selectHabitId)));
+void ActivityManager::goToSyncAll(std::function<void()> onReturn) {
+  replaceActivity(std::make_unique<SyncAllActivity>(renderer, mappedInput, std::move(onReturn)));
 }
-
-void ActivityManager::goToSyncAll() { replaceActivity(std::make_unique<SyncAllActivity>(renderer, mappedInput)); }
 
 #ifdef ENABLE_BLE_NOTIFY_SPIKE
 void ActivityManager::goToBleNotifications() {
   replaceActivity(std::make_unique<BleNotificationsActivity>(renderer, mappedInput));
 }
 #endif
-
-void ActivityManager::goToBudget(const uint8_t initialTab) {
-  replaceActivity(std::make_unique<BudgetActivity>(renderer, mappedInput, static_cast<int>(initialTab)));
-}
 
 void ActivityManager::goToReadMenu() { replaceActivity(std::make_unique<ReadMenuActivity>(renderer, mappedInput)); }
 
@@ -252,26 +241,8 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh));
 }
 
-void ActivityManager::goToSleep(bool fromTimeout) {
-  // Captured here, before replaceActivity() below swaps in SleepActivity:
-  // the framebuffer still holds whatever the outgoing screen last rendered,
-  // which is "whatever screen the device is on" -- capturing any later, once
-  // SleepActivity itself has painted, would just save a picture of the sleep
-  // screen. Same file and format installCustomWallpaper() writes, so
-  // SleepActivity's CUSTOM-mode render (which DYNAMIC also uses -- see
-  // SleepActivity::renderCustomSleepScreen()) picks it up unchanged.
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::DYNAMIC) {
-    const uint8_t* framebuffer = renderer.getFrameBuffer();
-    if (framebuffer != nullptr) {
-      if (!ScreenshotUtil::saveFramebufferAsBmp("/sleep.bmp", framebuffer, renderer.getDisplayWidth(),
-                                                renderer.getDisplayHeight())) {
-        LOG_ERR("ACT", "Failed to write dynamic sleep screen");
-      }
-    } else {
-      LOG_ERR("ACT", "Framebuffer unavailable; dynamic sleep screen not updated");
-    }
-  }
-  replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput, fromTimeout));
+void ActivityManager::goToSleep(bool fromTimeout, bool forceQuickResume) {
+  replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput, fromTimeout, forceQuickResume));
   loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
 }
 
@@ -282,30 +253,19 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 }
 
 void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
-  if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
-    const auto& activityName = currentActivity->name;
-    if (activityName == "FileBrowser") {
-      initialMenuItem = HomeMenuItem::FILE_BROWSER;
-    } else if (activityName == "RecentBooks") {
-      initialMenuItem = HomeMenuItem::RECENTS;
-    } else if (activityName == "OpdsBookBrowser") {
-      initialMenuItem = HomeMenuItem::OPDS_BROWSER;
-    } else if (activityName == "CrossPointWebServer") {
-      initialMenuItem = HomeMenuItem::FILE_TRANSFER;
-    } else if (activityName == "Settings") {
-      initialMenuItem = HomeMenuItem::SETTINGS_MENU;
-    }
-  }
-  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
+  // Home is the companion's own screen now, not the app-tile grid (see
+  // QuickPickActivity's own header comment) -- HomeActivity is left fully
+  // intact but unreachable, so this is the one place that changed rather
+  // than every one of this function's 25+ callers. QuickPickActivity has no
+  // grid to preselect a tile on, so initialMenuItem (still passed by several
+  // callers, e.g. OrganizerScreenActivity's own homeItem()) is simply
+  // ignored now rather than plumbed through -- harmless, not broken.
+  (void)initialMenuItem;
+  replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInput));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 
-void ActivityManager::goToCompanion() {
-  if (!SETTINGS.companionEnabled) return;
-  const auto rolled = quickpick::roll();
-  replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInput, rolled.text, rolled.itemId, rolled.isHabit,
-                                                      rolled.poolEmpty));
-}
+void ActivityManager::goToCompanion() { replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInput)); }
 
 void ActivityManager::goToApp(const homeAppOrder::AppId id) {
   switch (id) {
@@ -317,12 +277,6 @@ void ActivityManager::goToApp(const homeAppOrder::AppId id) {
       return;
     case homeAppOrder::AppId::Calendar:
       goToCalendar();
-      return;
-    case homeAppOrder::AppId::Budget:
-      goToBudget();
-      return;
-    case homeAppOrder::AppId::Habits:
-      goToHabits();
       return;
     case homeAppOrder::AppId::Notifications:
       // adjacentVisibleApp() already skips this app entirely when

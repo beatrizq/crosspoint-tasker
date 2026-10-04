@@ -15,6 +15,12 @@ struct Rect;
 class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
+  // An extra stop bolted onto selectorIndex, the same idiom
+  // OrganizerScreenActivity's own headerFocused uses: "previous" from
+  // selectorIndex == 0 lands here instead of wrapping to the last entry,
+  // "next" from here returns to selectorIndex == 0, "previous" from here
+  // wraps to the last entry. Right2 here opens Sync All.
+  bool headerFocused = false;
   bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;
@@ -66,18 +72,6 @@ class HomeActivity final : public Activity {
   // gap above the grid).
   int menuTop() const;
 
-  // Rolled once in onEnter() -- see quickpick::roll() -- and held stable while
-  // the cursor moves around the menu; a fresh visit to Home is what re-rolls
-  // it, not a redraw. Handed to QuickPickActivity unchanged when the
-  // companion's tile is activated, so its own Logs tab opens already showing
-  // a suggestion rolled for this visit rather than a stale one from whenever
-  // Home was last entered. Kept in sync with whatever QuickPickActivity ends
-  // up holding (its own Random action can change it) via its result on the
-  // way back -- see activateCompanion().
-  std::string homeSuggestionText;
-  std::string homeSuggestionItemId;
-  bool homeSuggestionIsHabit = false;
-  bool homeSuggestionPoolEmpty = true;
   // Re-checks the companion's sleep-window mood on an idle timer (see loop())
   // rather than only on screen entry -- otherwise sitting on Home past the
   // configured sleep time never shows its grid tile as asleep until you leave
@@ -98,11 +92,8 @@ class HomeActivity final : public Activity {
   // like every other tile's (see buildEntries()), and there is no room here
   // for more than the appearance itself.
   void drawCompanionIcon(Rect bounds) const;
-  // Opens QuickPickActivity showing homeSuggestion* -- the same pick already
-  // rolled for this Home visit (see its own comment), not a fresh one, so
-  // entering the screen is consistent regardless of how long the cursor
-  // lingered on the tile first. No-op when the companion is off (unreachable
-  // in practice: buildEntries() already leaves its tile out of the grid then).
+  // Opens QuickPickActivity. No-op when the companion is off (unreachable in
+  // practice: buildEntries() already leaves its tile out of the grid then).
   void activateCompanion();
 
   void onSelectBook(const std::string& path);

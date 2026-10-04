@@ -2,7 +2,6 @@
 
 #include <CompanionMood.h>
 #include <GfxRenderer.h>
-#include <HabitifyHabitCache.h>
 #include <HalClock.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -25,7 +24,7 @@ void completeTask(const size_t cacheIndex) {
   // radio off; the row leaves the list immediately either way.
   TODOIST_TASKS.completeTaskAt(cacheIndex);
   TODOIST_TASKS.saveToFile();
-  // A completion is one of the two things the companion reacts to; credit it
+  // A completion is one of the things the companion's mood tracks; credit it
   // immediately rather than waiting for the next sync or Home visit.
   COMPANION.recordActivity();
 }
@@ -38,33 +37,6 @@ void rescheduleTask(const size_t cacheIndex, const uint16_t newDueDays) {
   // the radio off; the row shows the new date immediately either way.
   TODOIST_TASKS.rescheduleTaskAt(cacheIndex, newDueDays);
   TODOIST_TASKS.saveToFile();
-}
-
-void logHabit(const size_t cacheIndex, const float amount) {
-  if (cacheIndex >= HABITIFY_HABITS.getHabits().size()) return;
-  if (amount <= 0.0f) return;
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  if (habits[cacheIndex].unitSymbol.empty()) return;
-
-  LOG_DBG("ORGACT", "+%g to %s", static_cast<double>(amount), habits[cacheIndex].name.c_str());
-  HABITIFY_HABITS.addPending(cacheIndex, amount);
-  HABITIFY_HABITS.saveToFile();
-  // A completion is one of the two things the companion reacts to; credit it
-  // immediately in case this press is what pushed a habit to isComplete().
-  COMPANION.recordActivity();
-}
-
-void completeHabit(const size_t cacheIndex) {
-  if (cacheIndex >= HABITIFY_HABITS.getHabits().size()) return;
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  if (habits[cacheIndex].isComplete()) return;
-
-  LOG_DBG("ORGACT", "Completing habit: %s", habits[cacheIndex].name.c_str());
-  HABITIFY_HABITS.completeHabitAt(cacheIndex);
-  HABITIFY_HABITS.saveToFile();
-  // A completion is one of the two things the companion reacts to; credit it
-  // immediately rather than waiting for the next sync or Home visit.
-  COMPANION.recordActivity();
 }
 
 bool computeFocusSessionEnd(const int durationMinutes, int32_t& endAbsMinutes, uint8_t& endHourUtc,
@@ -86,14 +58,14 @@ bool computeFocusSessionEnd(const int durationMinutes, int32_t& endAbsMinutes, u
   return true;
 }
 
-void beginFocusSession(const std::string& text, const std::string& itemId, const bool isHabit,
-                       const int durationMinutes, GfxRenderer& renderer, MappedInputManager& mappedInput) {
+void beginFocusSession(const std::string& text, const std::string& itemId, const int durationMinutes,
+                       GfxRenderer& renderer, MappedInputManager& mappedInput) {
   int32_t endAbsMinutes = 0;
   uint8_t endHourUtc = 0;
   uint8_t endMinuteUtc = 0;
   if (!computeFocusSessionEnd(durationMinutes, endAbsMinutes, endHourUtc, endMinuteUtc)) return;
 
-  activityManager.replaceActivity(std::make_unique<FocusSessionActivity>(renderer, mappedInput, text, itemId, isHabit,
+  activityManager.replaceActivity(std::make_unique<FocusSessionActivity>(renderer, mappedInput, text, itemId,
                                                                          endAbsMinutes, endHourUtc, endMinuteUtc));
 }
 

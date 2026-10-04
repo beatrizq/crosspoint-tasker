@@ -14,6 +14,25 @@ bool keyIs(const char* key, size_t len, const char* expected, size_t expectedLen
   return len == expectedLen && memcmp(key, expected, expectedLen) == 0;
 }
 
+// Appends `label` to the ", "-joined list in `dst`. A label that does not fit
+// is dropped whole (never truncated) and sets `full`, so no later label is added
+// after the gap.
+void appendLabel(char* dst, size_t dstSize, size_t& len, bool& full, const char* label, size_t labelLen) {
+  const size_t separator = len == 0 ? 0 : 2;
+  if (full || labelLen == 0) return;
+  if (len + separator + labelLen > dstSize - 1) {
+    full = true;
+    return;
+  }
+  if (separator) {
+    dst[len++] = ',';
+    dst[len++] = ' ';
+  }
+  memcpy(dst + len, label, labelLen);
+  len += labelLen;
+  dst[len] = '\0';
+}
+
 }  // namespace
 
 TodoistTasksParser::TodoistTasksParser(const TaskSink sink, void* sinkCtx)
@@ -31,11 +50,15 @@ void TodoistTasksParser::reset() {
   depth = 0;
   taskDepth = 0;
   dueDepth = 0;
+  labelsDepth = 0;
   tasksSeen = 0;
   currentId[0] = '\0';
   currentContent[0] = '\0';
   currentDue[0] = '\0';
   currentIsRecurring = false;
+  currentLabels[0] = '\0';
+  currentLabelsLen = 0;
+  labelsFull = false;
 }
 
 void TodoistTasksParser::feed(const char* data, const size_t len) { parser.feed(data, len); }
@@ -43,12 +66,15 @@ void TodoistTasksParser::feed(const char* data, const size_t len) { parser.feed(
 void TodoistTasksParser::commitTask() {
   if (currentId[0] != '\0' && currentContent[0] != '\0') {
     tasksSeen++;
-    if (sink) sink(sinkCtx, currentId, currentContent, currentDue, currentIsRecurring);
+    if (sink) sink(sinkCtx, currentId, currentContent, currentDue, currentIsRecurring, currentLabels);
   }
   currentId[0] = '\0';
   currentContent[0] = '\0';
   currentDue[0] = '\0';
   currentIsRecurring = false;
+  currentLabels[0] = '\0';
+  currentLabelsLen = 0;
+  labelsFull = false;
 }
 
 // -- SAX callbacks (static trampolines) -------------------------------------
@@ -72,6 +98,8 @@ void TodoistTasksParser::sOnKey(void* ctx, const char* key, const size_t len) {
           self->lastKey = LastKey::TASK_CONTENT;
         else if (keyIs(key, len, "due", 3))
           self->lastKey = LastKey::TASK_DUE;
+        else if (keyIs(key, len, "labels", 6))
+          self->lastKey = LastKey::TASK_LABELS;
         else
           self->lastKey = LastKey::NONE;
       } else if (self->dueDepth != 0 && self->taskDepth == self->dueDepth && keyIs(key, len, "date", 4)) {
@@ -93,6 +121,14 @@ void TodoistTasksParser::sOnString(void* ctx, const char* value, const size_t le
   auto* self = static_cast<TodoistTasksParser*>(ctx);
 
   if (self->position == Position::IN_TASK_OBJECT) {
+    // A label: a bare string inside the task's labels array (array elements
+    // carry no key, so lastKey says nothing here).
+    if (self->labelsDepth != 0 && self->taskDepth == self->labelsDepth) {
+      appendLabel(self->currentLabels, sizeof(self->currentLabels), self->currentLabelsLen, self->labelsFull, value,
+                  len);
+      self->lastKey = LastKey::NONE;
+      return;
+    }
     switch (self->lastKey) {
       case LastKey::TASK_ID:
         if (self->taskDepth == 1) safeCopy(self->currentId, sizeof(self->currentId), value, len);
@@ -135,9 +171,13 @@ void TodoistTasksParser::sOnObjectStart(void* ctx) {
       self->position = Position::IN_TASK_OBJECT;
       self->taskDepth = 1;
       self->dueDepth = 0;
+      self->labelsDepth = 0;
       self->currentId[0] = '\0';
       self->currentContent[0] = '\0';
       self->currentDue[0] = '\0';
+      self->currentLabels[0] = '\0';
+      self->currentLabelsLen = 0;
+      self->labelsFull = false;
       break;
     case Position::IN_TASK_OBJECT:
       self->taskDepth++;
@@ -183,6 +223,8 @@ void TodoistTasksParser::sOnArrayStart(void* ctx) {
       break;
     case Position::IN_TASK_OBJECT:
       self->taskDepth++;
+      // Only the array opened right after the "labels" key is the labels array.
+      if (self->lastKey == LastKey::TASK_LABELS && self->labelsDepth == 0) self->labelsDepth = self->taskDepth;
       break;
     default:
       break;
@@ -202,6 +244,7 @@ void TodoistTasksParser::sOnArrayEnd(void* ctx) {
       break;
     case Position::IN_TASK_OBJECT:
       if (self->dueDepth == self->taskDepth) self->dueDepth = 0;
+      if (self->labelsDepth == self->taskDepth) self->labelsDepth = 0;
       self->taskDepth--;
       break;
   }

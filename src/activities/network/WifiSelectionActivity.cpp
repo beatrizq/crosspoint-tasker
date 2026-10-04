@@ -737,7 +737,7 @@ void WifiSelectionActivity::loop() {
       Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
       const int contentTop =
           screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-      const int contentHeight = screen.height - contentTop - metrics.verticalSpacing * 2;
+      const int contentHeight = screen.height - contentTop - metrics.buttonHintsGap;
       int touchSel = static_cast<int>(selectedNetworkIndex);
       const auto listTouch =
           handleListTouch(touchSel, static_cast<int>(networks.size()), contentTop, contentHeight, false);
@@ -856,7 +856,7 @@ void WifiSelectionActivity::renderNetworkList(const Rect* screen, const ThemeMet
   } else {
     int contentTop =
         screen->y + metrics->topPadding + metrics->headerHeight + metrics->tabBarHeight + metrics->verticalSpacing;
-    int contentHeight = screen->height - contentTop - metrics->verticalSpacing * 2;
+    int contentHeight = screen->height - contentTop - metrics->buttonHintsGap;
     GUI.drawList(
         renderer, Rect{screen->x, contentTop, screen->width, contentHeight}, static_cast<int>(networks.size()),
         selectedNetworkIndex,
@@ -1038,6 +1038,17 @@ void WifiSelectionActivity::renderForgetPrompt(const Rect* screen, const ThemeMe
 }
 
 void WifiSelectionActivity::onComplete(const bool connected) {
+  // Cancelled (or never connected): put the radio back the way the screen found
+  // it. The scan turns it on, and a caller whose onExit() reboots whenever the
+  // radio is still up (most of them, to clear WiFi/TLS heap fragmentation) would
+  // otherwise restart the device just because the list was opened -- and a
+  // restart always lands on the Companion, not on the screen that opened the
+  // list. No connection was made, so there is nothing to clean up beyond this.
+  if (!connected) {
+    WiFi.scanDelete();
+    WiFi.disconnect(false);
+    WiFi.mode(WIFI_OFF);
+  }
   ActivityResult result;
   result.isCancelled = !connected;
   if (connected) {

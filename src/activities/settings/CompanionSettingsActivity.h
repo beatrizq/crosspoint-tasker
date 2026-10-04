@@ -7,23 +7,22 @@
 #include "util/ButtonNavigator.h"
 
 /**
- * Settings submenu for the organizing companion: enable/disable and its mood
- * display options. Reached from the Organizer tab like the other integrations
- * (Todoist, Habitify, etc.), even though there is nothing to sync here --
- * everything it controls is local, not an account to connect.
+ * Settings submenu for the organizing companion: its nickname, mood display,
+ * and mood-ladder thresholds. Reached from the Organizer tab like the other
+ * integrations (Todoist, Google Calendar), even though there is nothing to
+ * sync here -- everything it controls is local, not an account to connect.
  *
- * Enabling the companion is what puts it on Home -- there is no separate
- * placement toggle, so a companion the user turned on is never missing from
- * the screen it exists to be seen on.
+ * There is no enable/disable toggle -- the companion's own screen is Home
+ * (see ActivityManager::goHome()), so it is always active.
  */
 class CompanionSettingsActivity final : public Activity {
  public:
   explicit CompanionSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("CompanionSettings", renderer, mappedInput) {}
 
-  // Nickname, Enabled, Show mood label, Sleep start, Sleep end,
-  // Happy at, Satisfied at, Neglected after, Reset.
-  static constexpr int MENU_ITEMS = 9;
+  // Nickname, Sleep start, Sleep end, Amazed at, Happy at, Satisfied at,
+  // Neglected after, Reset.
+  static constexpr int MENU_ITEMS = 8;
 
   void onEnter() override;
   void onExit() override;
@@ -32,18 +31,19 @@ class CompanionSettingsActivity final : public Activity {
 
  private:
   void handleSelection();
-  // Opens the numeric picker for one of the three mood-ladder thresholds
+  // Opens the numeric picker for one of the mood-ladder thresholds
   // (selectedIndex identifies which). The picker's own min/max already
   // reflect the current value of the field it is paired with (happyPoints
-  // must stay above satisfiedPoints; both and neglectedDays must stay >= 1),
+  // must stay above satisfiedPoints and below amazedPoints; all and
+  // neglectedDays must stay >= 1),
   // so the result is saved as-is -- see CrossPointSettings.h's comment on
   // companionHappyPoints for why that pairing exists.
   void offerThresholdPicker(int selectedIndex);
-  // Stamps CompanionState::activatedDay the first time it notices the
-  // companion enabled with no activation ever recorded -- whether that is
-  // because it was just switched on here, or because it was already on from
-  // before this field existed. No-op once activatedDay is already set, and
-  // whenever the companion is off or the clock has no reading yet.
+  // Stamps CompanionState::activatedDay the first time this is called with
+  // no activation ever recorded -- whether that is because the companion
+  // was just reset, or because it was already active from before this field
+  // existed. No-op once activatedDay is already set, or when the clock has
+  // no reading yet.
   void stampActivationIfNeeded();
 
   ButtonNavigator buttonNavigator;
@@ -52,13 +52,14 @@ class CompanionSettingsActivity final : public Activity {
 
   // SettingsActivity dispatches this screen on Confirm going down, so the
   // matching release lands here instead, once this screen is already active.
-  // Unswallowed, it reads as a fresh Confirm-release on row 0 (Enabled) and
-  // flips it before the user has touched anything. Armed in onEnter() only
-  // when Confirm is still physically down at that point.
+  // Unswallowed, it reads as a fresh Confirm-release on row 0 (Nickname) and
+  // opens the nickname editor before the user has touched anything. Armed in
+  // onEnter() only when Confirm is still physically down at that point.
   bool swallowConfirmRelease = false;
-  // The Enabled row's confirmation popup answers on the button going down (see
-  // ConfirmationActivity), so its Confirm/Back release lands back here once
-  // this screen is active again. Same idea as swallowConfirmRelease above,
-  // armed instead from the popup's result handler.
+  // The Reset row's confirmation popup (and the Sleep start/end and
+  // threshold sub-screens) answer on the button going down, so a Confirm/
+  // Back release can still land back here once this screen is active again.
+  // Same idea as swallowConfirmRelease above, armed instead from each of
+  // those own result handlers.
   bool swallowBackRelease = false;
 };

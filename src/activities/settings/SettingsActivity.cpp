@@ -18,7 +18,6 @@
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
 #include "GCalSettingsActivity.h"
-#include "HabitifySettingsActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
@@ -31,22 +30,36 @@
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
 #include "TodoistSettingsActivity.h"
-#include "YnabSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/BleNotifyRelay.h"
-#include "util/HomeAppOrder.h"
 
-const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
-                                                              StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM,
-                                                              StrId::STR_CAT_ORGANIZER};
+StrId SettingsActivity::bucketName(const SettingsBucket bucket) {
+  switch (bucket) {
+    case SettingsBucket::Reader:
+      return StrId::STR_CAT_READER;
+    case SettingsBucket::Controls:
+      return StrId::STR_CAT_CONTROLS;
+    case SettingsBucket::Library:
+      return StrId::STR_CAT_LIBRARY;
+    case SettingsBucket::System:
+      return StrId::STR_CAT_SYSTEM;
+    case SettingsBucket::Organizer:
+      return StrId::STR_CAT_ORGANIZER;
+    case SettingsBucket::Display:
+    case SettingsBucket::None:
+      break;
+  }
+  return StrId::STR_CAT_DISPLAY;
+}
 
 void SettingsActivity::rebuildSettingsLists() {
   displaySettings.clear();
   readerSettings.clear();
   controlsSettings.clear();
+  librarySettings.clear();
   systemSettings.clear();
   organizerSettings.clear();
 
@@ -74,6 +87,8 @@ void SettingsActivity::rebuildSettingsLists() {
         continue;
       }
       controlsSettings.push_back(setting);
+    } else if (setting.category == StrId::STR_CAT_LIBRARY) {
+      librarySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_ORGANIZER) {
@@ -82,33 +97,42 @@ void SettingsActivity::rebuildSettingsLists() {
   }
 
   // Append device-only ACTION items
+  // Device-wide, so System rather than Controls (which is under Reader).
   if (!BoardConfig::hasTouch()) {
-    controlsSettings.insert(controlsSettings.begin(),
-                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+    systemSettings.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
-  // App Order leads the individual apps, as asked: it is a property of the
-  // set of apps rather than of any one of them, so it comes first rather
-  // than trailing after it.
-  organizerSettings.push_back(SettingInfo::Action(StrId::STR_APP_ORDER, SettingAction::AppOrder));
+  // Where books come from and how reading progress follows them around.
+  librarySettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
+  librarySettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_TODOIST, SettingAction::Todoist));
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_CALENDAR, SettingAction::GoogleCalendar));
-  organizerSettings.push_back(SettingInfo::Action(StrId::STR_YNAB, SettingAction::Ynab));
-  organizerSettings.push_back(SettingInfo::Action(StrId::STR_HABITIFY, SettingAction::Habitify));
   organizerSettings.push_back(SettingInfo::Action(StrId::STR_COMPANION, SettingAction::Companion));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   // TODO: Touch devices need their own firmware update path/artifacts before OTA is exposed.
   if (!BoardConfig::hasTouch()) {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_FILE_TRANSFER, SettingAction::FileTransfer));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   readerSettings.insert(readerSettings.begin(),
                         SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
+  // The two groups that live under Reader as submenus, right after the text and
+  // font entries that open screens of their own.
+  readerSettings.insert(readerSettings.begin() + 2,
+                        SettingInfo::Action(StrId::STR_CAT_CONTROLS, SettingAction::ControlsMenu));
+  readerSettings.insert(readerSettings.begin() + 3,
+                        SettingInfo::Action(StrId::STR_CAT_LIBRARY, SettingAction::LibraryMenu));
+  // Clear Reading Cache sits just ahead of Hide Battery %, so the Reader tab ends
+  // with the cache action and then the two status-bar entries.
+  {
+    const auto hideBattery = std::find_if(readerSettings.begin(), readerSettings.end(), [](const SettingInfo& info) {
+      return info.valuePtr == &CrossPointSettings::hideBatteryPercentage;
+    });
+    readerSettings.insert(hideBattery, SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+  }
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
   // Not reader-specific (see clockFormat's own comment in SettingsList.h), so
   // the offset editor and manual sync live in Display rather than nested under
@@ -124,23 +148,25 @@ void SettingsActivity::rebuildSettingsLists() {
 // here and as a lambda in loop() - and adding the Organizer tab updated only
 // this copy, so selecting that tab left the list showing System's entries.
 void SettingsActivity::applyCategorySelection() {
-  switch (selectedCategoryIndex) {
-    case 0:
-      currentSettings = &displaySettings;
-      break;
-    case 1:
+  const int index = selectedCategoryIndex >= 0 && selectedCategoryIndex < categoryCount() ? selectedCategoryIndex : 0;
+  switch (tabBuckets[static_cast<size_t>(index)]) {
+    case SettingsBucket::Reader:
       currentSettings = &readerSettings;
       break;
-    case 2:
+    case SettingsBucket::Controls:
       currentSettings = &controlsSettings;
       break;
-    case 3:
+    case SettingsBucket::Library:
+      currentSettings = &librarySettings;
+      break;
+    case SettingsBucket::System:
       currentSettings = &systemSettings;
       break;
-    case 4:
+    case SettingsBucket::Organizer:
       currentSettings = &organizerSettings;
       break;
-    default:
+    case SettingsBucket::Display:
+    case SettingsBucket::None:
       currentSettings = &displaySettings;
       break;
   }
@@ -153,10 +179,15 @@ void SettingsActivity::onEnter() {
   // Reset selection to first category
   selectedCategoryIndex = 0;
   selectedSettingIndex = 0;
+  headerFocused = false;
   preserveQuickResumeTimeoutOn =
-      SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
+      SETTINGS.timeoutSleepScreen == CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_QUICK_RESUME;
   quickResumeTimeoutAutoEnabled = false;
-  syncQuickResumeTimeoutForSleepScreen(/*sleepScreenChanged=*/true, /*quickResumeTimeoutChanged=*/false);
+  // Only the top-level screen owns the sleep-screen rules; a submenu holds none
+  // of those settings.
+  if (!isSubmenu) {
+    syncQuickResumeTimeoutForSleepScreen(/*sleepScreenChanged=*/true, /*quickResumeTimeoutChanged=*/false);
+  }
 
   rebuildSettingsLists();
 
@@ -185,8 +216,12 @@ void SettingsActivity::loop() {
 
   // Handle actions with early return
   if (mappedInput.wasPressed(MappedInputManager::Button::Right2)) {
+    if (headerFocused) {
+      activityManager.goToSyncAll([] { activityManager.goToSettings(); });
+      return;
+    }
     if (selectedSettingIndex == 0) {
-      selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
+      selectedCategoryIndex = (selectedCategoryIndex < categoryCount() - 1) ? (selectedCategoryIndex + 1) : 0;
       hasChangedCategory = true;
       requestUpdate();
     } else {
@@ -197,40 +232,31 @@ void SettingsActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Right1)) {
-    // Always leaves, regardless of cursor depth: labelled Apps (see
-    // HomeActivity), so it reads as "go to the Apps screen", not "back up one
-    // level first" -- a setting row deep in a category used to need two
-    // presses to leave, one to surface the cursor to the category tab bar and
-    // a second to actually leave, which no longer matches what the button
-    // says it does.
+    // Two-level Back, the same as the organizer screens: from a setting row
+    // it first surfaces the cursor to the category tab bar (labelled Back, see
+    // render()); only from the tab bar or the header does it leave (labelled
+    // Home).
+    if (!headerFocused && selectedSettingIndex > 0) {
+      selectedSettingIndex = 0;
+      requestUpdate();
+      return;
+    }
     SETTINGS.saveToFile();
-    onGoHome();
+    if (isSubmenu) {
+      finish();
+    } else {
+      onGoHome();
+    }
     return;
   }
 
-  // Side Up/Down: jump to the previous/next app in the home grid's own
-  // order, from wherever the cursor already is -- the same shortcut every
-  // app screen has (see OrganizerScreenActivity/QuickPickActivity's own
-  // identical block). Category-switching is still reachable the slower way:
-  // move the selection up to the tab bar and press Confirm to cycle it.
-  // Independent of the front buttons' own Up/Down (row paging) below. A
-  // fresh press each, same guard reasoning as Back/Confirm above.
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) upPressSeen = true;
-  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) downPressSeen = true;
-  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
-    if (upPressSeen) {
-      activityManager.goToApp(homeAppOrder::adjacentVisibleApp(homeAppOrder::AppId::Settings, /*forward=*/false));
-    }
-    upPressSeen = false;
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    if (downPressSeen) {
-      activityManager.goToApp(homeAppOrder::adjacentVisibleApp(homeAppOrder::AppId::Settings, /*forward=*/true));
-    }
-    downPressSeen = false;
-    return;
-  }
+  // Settings is no longer one of the apps on the home grid's own cycle (see
+  // HomeActivity::buildEntries()), so the side Up/Down "jump to the adjacent
+  // app" shortcut every grid-tile screen has no longer has a coherent
+  // meaning here -- there is no "adjacent app" to a screen that isn't part
+  // of that cycle any more. Side Up/Down falls through to ordinary row
+  // navigation below instead (NavNext/NavPrevious already blends them in
+  // with front Left1/Left2).
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   int tx = 0;
@@ -239,12 +265,12 @@ void SettingsActivity::loop() {
   const int listTop = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
   const int listHeight =
       renderer.getScreenHeight() - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
-                                    metrics.buttonHintsHeight + metrics.verticalSpacing * 2);
+                                    metrics.buttonHintsHeight + metrics.buttonHintsGap);
   auto buildTabs = [&]() {
     std::vector<TabInfo> tabs;
-    tabs.reserve(categoryCount);
-    for (int i = 0; i < categoryCount; i++) {
-      tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
+    tabs.reserve(categoryCount());
+    for (int i = 0; i < categoryCount(); i++) {
+      tabs.push_back({I18N.get(bucketName(tabBuckets[static_cast<size_t>(i)])), selectedCategoryIndex == i});
     }
     return tabs;
   };
@@ -312,10 +338,14 @@ void SettingsActivity::loop() {
   const auto& navMetrics = UITheme::getInstance().getMetrics();
   const int settingsListHeight =
       renderer.getScreenHeight() - (navMetrics.topPadding + navMetrics.headerHeight + navMetrics.tabBarHeight +
-                                    navMetrics.buttonHintsHeight + navMetrics.verticalSpacing * 2);
+                                    navMetrics.buttonHintsHeight + navMetrics.buttonHintsGap);
   const int settingsPageItems = GUI.getListPageItems(settingsListHeight, false);
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
+    // A swipe is a page-jump, not a single step, so it always leaves the
+    // header stop (if it was focused) -- same reasoning as
+    // OrganizerScreenActivity's own swipe handling.
+    headerFocused = false;
     selectedSettingIndex = selectedSettingIndex == 0 ? 1
                                                      : ButtonNavigator::nextPageIndex(
                                                            selectedSettingIndex, settingsCount + 1, settingsPageItems);
@@ -323,6 +353,7 @@ void SettingsActivity::loop() {
     return;
   }
   if (swipe == MappedInputManager::SwipeDir::Down) {
+    headerFocused = false;
     selectedSettingIndex =
         ButtonNavigator::previousPageIndex(selectedSettingIndex, settingsCount + 1, settingsPageItems);
     requestUpdate();
@@ -330,12 +361,26 @@ void SettingsActivity::loop() {
   }
 
   buttonNavigator.onNextRelease([this] {
-    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+    if (headerFocused) {
+      headerFocused = false;
+      selectedSettingIndex = 0;
+    } else if (selectedSettingIndex == settingsCount) {
+      headerFocused = true;
+    } else {
+      selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+    }
     requestUpdate();
   });
 
   buttonNavigator.onPreviousRelease([this] {
-    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
+    if (headerFocused) {
+      headerFocused = false;
+      selectedSettingIndex = settingsCount;
+    } else if (selectedSettingIndex == 0) {
+      headerFocused = true;
+    } else {
+      selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
+    }
     requestUpdate();
   });
 
@@ -353,7 +398,7 @@ void SettingsActivity::toggleCurrentSetting() {
 
   const auto& setting = (*currentSettings)[selectedSetting];
   const bool sleepScreenChanged = setting.valuePtr == &CrossPointSettings::sleepScreen;
-  const bool quickResumeTimeoutChanged = setting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
+  const bool quickResumeTimeoutChanged = setting.valuePtr == &CrossPointSettings::timeoutSleepScreen;
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
@@ -445,12 +490,6 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::GoogleCalendar:
         startActivityForResult(std::make_unique<GCalSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
-      case SettingAction::Ynab:
-        startActivityForResult(std::make_unique<YnabSettingsActivity>(renderer, mappedInput), resultHandler);
-        break;
-      case SettingAction::Habitify:
-        startActivityForResult(std::make_unique<HabitifySettingsActivity>(renderer, mappedInput), resultHandler);
-        break;
       case SettingAction::Companion:
         startActivityForResult(std::make_unique<CompanionSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
@@ -480,6 +519,23 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::SdFirmwareUpdate:
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::ControlsMenu:
+      case SettingAction::LibraryMenu:
+        // The same screen showing just that group, one level down; Back returns here.
+        startActivityForResult(
+            std::make_unique<SettingsActivity>(
+                renderer, mappedInput,
+                setting.action == SettingAction::ControlsMenu ? SettingsBucket::Controls : SettingsBucket::Library),
+            [this](const ActivityResult&) {
+              rebuildSettingsLists();
+              requestUpdate();
+            });
+        break;
+      case SettingAction::FileTransfer:
+        // Replaces this screen rather than running as a sub-activity, like every
+        // other entry into File Transfer; it comes back to Settings on exit.
+        activityManager.goToFileTransfer(FileTransferReturn::Settings);
         break;
       case SettingAction::DownloadFonts:
         startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),
@@ -524,13 +580,16 @@ void SettingsActivity::toggleCurrentSetting() {
 void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {
   if (quickResumeTimeoutChanged) {
     preserveQuickResumeTimeoutOn =
-        SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
+        SETTINGS.timeoutSleepScreen == CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_QUICK_RESUME;
     quickResumeTimeoutAutoEnabled = false;
   }
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) {
-    if (SETTINGS.quickResumeSleepScreen != CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT) {
-      SETTINGS.quickResumeSleepScreen = CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
+    if (SETTINGS.timeoutSleepScreen != CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_QUICK_RESUME) {
+      // Redundant while Sleep Screen mode itself is Quick Resume -- every
+      // sleep already resumes quick regardless of this setting -- but showing
+      // Sleep here would read as contradicting that.
+      SETTINGS.timeoutSleepScreen = CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_QUICK_RESUME;
       quickResumeTimeoutAutoEnabled = !preserveQuickResumeTimeoutOn;
     } else if (sleepScreenChanged && !preserveQuickResumeTimeoutOn) {
       quickResumeTimeoutAutoEnabled = true;
@@ -539,7 +598,7 @@ void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChan
   }
 
   if (sleepScreenChanged && quickResumeTimeoutAutoEnabled && !preserveQuickResumeTimeoutOn) {
-    SETTINGS.quickResumeSleepScreen = CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_NEVER;
+    SETTINGS.timeoutSleepScreen = CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_SLEEP;
     quickResumeTimeoutAutoEnabled = false;
   }
 }
@@ -569,24 +628,31 @@ void SettingsActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
-                 CROSSPOINT_VERSION);
+  const Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  GUI.drawHeader(renderer, headerRect, isSubmenu ? I18N.get(bucketName(tabBuckets[0])) : tr(STR_SETTINGS_TITLE),
+                 isSubmenu ? nullptr : CROSSPOINT_VERSION);
+  // Hovering the header (see headerFocused's own comment): a true pixel
+  // invert, the same technique QuickPickActivity's own header focus uses.
+  if (headerFocused) {
+    renderer.invertRect(headerRect.x, headerRect.y, headerRect.width,
+                        std::min(HEADER_FOCUS_HIGHLIGHT_HEIGHT, headerRect.height));
+  }
 
   std::vector<TabInfo> tabs;
-  tabs.reserve(categoryCount);
-  for (int i = 0; i < categoryCount; i++) {
-    tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
+  tabs.reserve(categoryCount());
+  for (int i = 0; i < categoryCount(); i++) {
+    tabs.push_back({I18N.get(bucketName(tabBuckets[static_cast<size_t>(i)])), selectedCategoryIndex == i});
   }
   GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
-                 selectedSettingIndex == 0);
+                 selectedSettingIndex == 0 && !headerFocused);
 
   const auto& settings = *currentSettings;
   GUI.drawList(
       renderer,
       Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
            pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
-                         metrics.verticalSpacing * 2)},
-      settingsCount, selectedSettingIndex - 1,
+                         metrics.buttonHintsGap)},
+      settingsCount, headerFocused ? -1 : selectedSettingIndex - 1,
       [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
       [&settings](int i) {
         const auto& setting = settings[i];
@@ -638,15 +704,20 @@ void SettingsActivity::render(RenderLock&&) {
 
   // Draw help text
   const auto confirmLabel =
-      (selectedSettingIndex == 0)
-          ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
+      headerFocused ? tr(STR_SYNC_ALL)
+      : (selectedSettingIndex == 0)
+          ? (categoryCount() > 1
+                 ? I18N.get(bucketName(tabBuckets[static_cast<size_t>((selectedCategoryIndex + 1) % categoryCount())]))
+                 : "")
           : (selectedSettingIndex > 0 && (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP
                  ? tr(STR_SELECT)
                  : tr(STR_TOGGLE));
 
-  // Back always ends at onGoHome() (see this file's own Back handler) rather
-  // than returning to a caller, so the hint says Home, not Back.
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // Back on a setting row (it surfaces to the category tab bar), Home once
+  // already there or on the header -- see this file's own Right1 handler.
+  const bool rowFocused = !headerFocused && selectedSettingIndex > 0;
+  const auto labels = mappedInput.mapLabels(rowFocused || isSubmenu ? tr(STR_BACK) : tr(STR_HOME), confirmLabel,
+                                            tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen

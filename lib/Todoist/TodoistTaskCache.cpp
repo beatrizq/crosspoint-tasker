@@ -17,6 +17,10 @@ void TodoistTaskCache::toJson(JsonDocument& doc) const {
     todoist::isoFromDueDays(task.dueDays, iso, sizeof(iso));
     if (iso[0] != '\0') obj["due"] = iso;
     obj["isRecurring"] = task.isRecurring;
+    // Only written when it says something: Filter 1 alone is what a card
+    // written before there were two filters holds.
+    if (task.filterMask != TodoistTask::FILTER_1_BIT) obj["filters"] = task.filterMask;
+    if (!task.labels.empty()) obj["labels"] = task.labels;
   }
   JsonArray pending = doc["pending"].to<JsonArray>();
   for (const auto& id : pendingIds) {
@@ -38,6 +42,7 @@ void TodoistTaskCache::toJson(JsonDocument& doc) const {
     obj["title"] = entry.title;
     if (!entry.taskId.empty()) obj["taskId"] = entry.taskId;
     if (entry.pending) obj["pending"] = true;
+    if (entry.filterMask != (TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT)) obj["filters"] = entry.filterMask;
   }
 }
 
@@ -51,7 +56,7 @@ bool TodoistTaskCache::fromJson(JsonVariantConst doc) {
   completedTodayEntries.clear();
   JsonArrayConst entriesArr = doc["completedTodayEntries"];
   if (!entriesArr.isNull()) {
-    const size_t entryCount = std::min(entriesArr.size(), MAX_COMPLETED_TODAY_TITLES);
+    const size_t entryCount = std::min(entriesArr.size(), MAX_COMPLETED_STORED);
     completedTodayEntries.reserve(entryCount);
     for (size_t i = 0; i < entryCount; i++) {
       const char* title = entriesArr[i]["title"] | "";
@@ -60,6 +65,11 @@ bool TodoistTaskCache::fromJson(JsonVariantConst doc) {
       entry.title = title;
       entry.taskId = entriesArr[i]["taskId"] | "";
       entry.pending = entriesArr[i]["pending"] | false;
+      entry.filterMask =
+          entriesArr[i]["filters"] | static_cast<uint8_t>(TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT);
+      if ((entry.filterMask & (TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT)) == 0) {
+        entry.filterMask = TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT;
+      }
       completedTodayEntries.push_back(std::move(entry));
     }
   } else {
@@ -68,7 +78,7 @@ bool TodoistTaskCache::fromJson(JsonVariantConst doc) {
     // this feature existed was never tracked with a cancellable push anyway.
     JsonArrayConst titlesArr = doc["completedTodayTitles"];
     if (!titlesArr.isNull()) {
-      const size_t titleCount = std::min(titlesArr.size(), MAX_COMPLETED_TODAY_TITLES);
+      const size_t titleCount = std::min(titlesArr.size(), MAX_COMPLETED_STORED);
       completedTodayEntries.reserve(titleCount);
       for (size_t i = 0; i < titleCount; i++) {
         const char* title = titlesArr[i] | "";
@@ -86,6 +96,12 @@ bool TodoistTaskCache::fromJson(JsonVariantConst doc) {
     task.content = obj["content"] | "";
     task.dueDays = todoist::dueDaysFromIso(obj["due"] | "");
     task.isRecurring = obj["isRecurring"] | false;
+    task.labels = obj["labels"] | "";
+    if (task.labels.size() > TodoistTask::LABELS_MAX_LEN) task.labels.resize(TodoistTask::LABELS_MAX_LEN);
+    task.filterMask = obj["filters"] | static_cast<uint8_t>(TodoistTask::FILTER_1_BIT);
+    if ((task.filterMask & (TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT)) == 0) {
+      task.filterMask = TodoistTask::FILTER_1_BIT;
+    }
     if (task.id.empty()) continue;
     tasks.push_back(std::move(task));
   }
@@ -112,8 +128,8 @@ bool TodoistTaskCache::fromJson(JsonVariantConst doc) {
     // DUE_NONE is a real, intentional value here -- a pending "clear the due
     // date" reschedule -- not just what a malformed "due" parses to, so it is
     // not skipped the way an empty id is. Dropping it silently would mean a
-    // reboot loses that pending sync entirely, the same class of bug a habit
-    // completion's own pending flag once had.
+    // reboot loses that pending sync entirely, the same class of bug a lost
+    // pending completion is.
     pendingReschedules.push_back({id, todoist::dueDaysFromIso(obj["due"] | "")});
   }
 
@@ -133,16 +149,53 @@ size_t TodoistTaskCache::getDueTodayOrOverdueCount() const {
                                            [today](const TodoistTask& t) { return t.overdue || t.dueDays == today; }));
 }
 
-void TodoistTaskCache::setTasks(std::vector<TodoistTask>&& fetched, const std::string& date) {
-  tasks = std::move(fetched);
-  if (tasks.size() > MAX_TASKS) tasks.resize(MAX_TASKS);
+void TodoistTaskCache::setTasksForFilter(std::vector<TodoistTask>&& fetched, const uint8_t filterBit,
+                                         const std::string& date) {
+  // Rows this filter no longer matches: drop the bit (only rows already tagged
+  // with it are this filter's concern -- see the header comment on why a row
+  // belonging only to the other bit is left untouched here). One left with no
+  // filter bit at all belongs to nothing shown any more and is dropped.
+  for (auto it = tasks.begin(); it != tasks.end();) {
+    if ((it->filterMask & filterBit) == 0) {
+      ++it;
+      continue;
+    }
+    const bool stillPresent =
+        std::any_of(fetched.begin(), fetched.end(), [&it](const TodoistTask& t) { return t.id == it->id; });
+    if (!stillPresent) {
+      it->filterMask = static_cast<uint8_t>(it->filterMask & ~filterBit);
+      if (it->filterMask == 0) {
+        it = tasks.erase(it);
+        continue;
+      }
+    }
+    ++it;
+  }
+
+  // The fresh rows: an id already known (possibly only under the other filter)
+  // has its fields refreshed in place and gains filterBit rather than becoming a
+  // duplicate; anything else is genuinely new.
+  for (auto& fetchedTask : fetched) {
+    const auto existing = std::find_if(tasks.begin(), tasks.end(),
+                                       [&fetchedTask](const TodoistTask& t) { return t.id == fetchedTask.id; });
+    if (existing != tasks.end()) {
+      const uint8_t mergedMask = static_cast<uint8_t>(existing->filterMask | filterBit);
+      *existing = fetchedTask;
+      existing->filterMask = mergedMask;
+    } else if (tasks.size() < MAX_TASKS) {
+      fetchedTask.filterMask = filterBit;
+      tasks.push_back(std::move(fetchedTask));
+    }
+  }
+
   // Ascending by due date: oldest overdue first, today's tasks last, undated
   // after those (DUE_NONE is the maximum). Stable, so the server's ordering
   // survives within a date.
   std::stable_sort(tasks.begin(), tasks.end(),
                    [](const TodoistTask& a, const TodoistTask& b) { return a.dueDays < b.dueDays; });
-  // An empty date means today could not be established this sync; the header
-  // keeps showing the last date it did know rather than falling back to "--".
+  // An empty date means this call is not the sync's clock source (the second of
+  // two filters, say); the header keeps showing whatever the first call (or an
+  // earlier sync) set.
   if (!date.empty()) syncDate = date;
   applyOverdueFlags();
   rolloverCompletedIfNeeded();
@@ -171,26 +224,62 @@ void TodoistTaskCache::completeTaskAt(const size_t index) {
   // since this is a local, not-yet-pushed completion. The next sync's
   // setCompletedToday() replaces this with the server's authoritative list,
   // same as it does for the count.
-  if (completedTodayEntries.size() < MAX_COMPLETED_TODAY_TITLES) {
-    completedTodayEntries.push_back({tasks[index].content, tasks[index].id, /*pending=*/true});
+  if (completedTodayEntries.size() < MAX_COMPLETED_STORED) {
+    completedTodayEntries.push_back({tasks[index].content, tasks[index].id, /*pending=*/true, tasks[index].filterMask});
   }
 
   tasks.erase(tasks.begin() + static_cast<long>(index));
 }
 
-void TodoistTaskCache::setCompletedToday(const uint16_t count, const std::string& date,
-                                         std::vector<std::string>&& titles) {
-  if (!date.empty()) syncDate = date;
-  completedToday = count;
-  completedDay = todoist::dueDaysFromIso(syncDate.c_str());
-  // A fetch is authoritative -- every resulting row is Synced (pending=false,
-  // taskId="" since there is no push left to cancel).
-  completedTodayEntries.clear();
-  completedTodayEntries.reserve(std::min(titles.size(), MAX_COMPLETED_TODAY_TITLES));
-  for (auto& title : titles) {
-    if (completedTodayEntries.size() >= MAX_COMPLETED_TODAY_TITLES) break;
-    completedTodayEntries.push_back({std::move(title), "", false});
+void TodoistTaskCache::setCompletedForFilter(std::vector<TodoistCompletedLogEntry>&& entries, const uint8_t filterBit,
+                                             const std::string& date) {
+  if (!date.empty()) {
+    syncDate = date;
+    completedDay = todoist::dueDaysFromIso(syncDate.c_str());
   }
+
+  // Rows this filter no longer matches: drop the bit, same reasoning as
+  // setTasksForFilter()'s own comment. An entry with no taskId (older than this
+  // feature, or one the API genuinely omitted an id for) can never be matched
+  // against a fresh fetch either way, so it is left untouched rather than
+  // guessed at -- it is not this filter's concern to prune.
+  for (auto it = completedTodayEntries.begin(); it != completedTodayEntries.end();) {
+    if ((it->filterMask & filterBit) == 0 || it->taskId.empty()) {
+      ++it;
+      continue;
+    }
+    const bool stillPresent = std::any_of(entries.begin(), entries.end(),
+                                          [&it](const TodoistCompletedLogEntry& e) { return e.taskId == it->taskId; });
+    if (!stillPresent) {
+      it->filterMask = static_cast<uint8_t>(it->filterMask & ~filterBit);
+      if (it->filterMask == 0) {
+        it = completedTodayEntries.erase(it);
+        continue;
+      }
+    }
+    ++it;
+  }
+
+  // The fresh rows: a task id already known (possibly only under the other
+  // filter) gains filterBit rather than becoming a duplicate; anything else is
+  // new. Every fetched entry is Synced (pending=false) -- a fetch is by
+  // definition already confirmed by the server, with no push left to cancel.
+  for (auto& entry : entries) {
+    const auto existing = std::find_if(completedTodayEntries.begin(), completedTodayEntries.end(),
+                                       [&entry](const TodoistCompletedLogEntry& other) {
+                                         return !entry.taskId.empty() && other.taskId == entry.taskId;
+                                       });
+    if (existing != completedTodayEntries.end()) {
+      existing->filterMask = static_cast<uint8_t>(existing->filterMask | filterBit);
+      existing->pending = false;
+    } else if (completedTodayEntries.size() < MAX_COMPLETED_STORED) {
+      entry.pending = false;
+      entry.filterMask = filterBit;
+      completedTodayEntries.push_back(std::move(entry));
+    }
+  }
+
+  completedToday = static_cast<uint16_t>(completedTodayEntries.size());
 }
 
 bool TodoistTaskCache::cancelCompletedLogEntry(const size_t displayIndex) {

@@ -8,18 +8,16 @@ class GfxRenderer;
 class MappedInputManager;
 
 /**
- * The cache-mutating core of "complete a task" / "log a habit", shared by
- * TasksActivity/HabitsActivity's own row action and QuickPickActivity's
- * Options menu acting on the companion's suggested item.
+ * The cache-mutating core of "complete a task", shared by TasksActivity's own
+ * row action and QuickPickActivity's Options menu.
  *
  * Each screen still owns what is particular to it - TasksActivity's tab
- * rebuild and selection clamp, HabitsActivity's requestUpdate() - this only
- * holds the three steps that must not drift out of sync between call sites:
- * mutate the cache, persist it, and credit the companion.
+ * rebuild and selection clamp - this only holds the steps that must not drift
+ * out of sync between call sites: mutate the cache, persist it, and credit the
+ * companion.
  *
  * Callers are responsible for holding a RenderLock across the call, exactly
- * as they already do around TodoistTaskCache/HabitifyHabitCache mutations
- * made directly.
+ * as they already do around TodoistTaskCache mutations made directly.
  */
 namespace organizerActions {
 
@@ -30,19 +28,8 @@ void completeTask(size_t cacheIndex);
 // Sets the task at `cacheIndex`'s due date to `newDueDays` (packed days since
 // 2000-01-01, see TodoistDate.h) immediately, and queues the change for the
 // next sync. No-op for an out-of-range index. Does not credit the companion -
-// a reschedule is not progress the way a completion or a habit log is.
+// a reschedule is not progress the way a completion is.
 void rescheduleTask(size_t cacheIndex, uint16_t newDueDays);
-
-// Adds `amount` to the habit at `cacheIndex`'s unpushed progress. No-op for
-// an out-of-range index, a non-positive amount, or a habit with no unit (see
-// HabitifyHabit::unitSymbol -- nothing to log against a goal-less habit).
-void logHabit(size_t cacheIndex, float amount);
-
-// Marks the habit at `cacheIndex` complete directly, via Habitify's dedicated
-// endpoint - unlike logHabit(), this works even for a goal-less habit (no
-// unitSymbol), since it needs no amount. No-op for an out-of-range index or a
-// habit that is already complete.
-void completeHabit(size_t cacheIndex);
 
 // The end time for a focus session starting now and running `durationMinutes`,
 // as (endAbsMinutes: a UTC day-number*1440 + minute-of-day, comparable across
@@ -52,12 +39,12 @@ void completeHabit(size_t cacheIndex);
 // untouched, if there is no valid clock to time the session against.
 bool computeFocusSessionEnd(int durationMinutes, int32_t& endAbsMinutes, uint8_t& endHourUtc, uint8_t& endMinuteUtc);
 
-// Starts a locked focus session for (text, itemId, isHabit) running
+// Starts a locked focus session for (text, itemId) running
 // `durationMinutes` from now, replacing the current activity with
 // FocusSessionActivity. No-op if there is no valid clock to time it against
 // (see computeFocusSessionEnd()) -- the caller's screen is simply left as is.
-void beginFocusSession(const std::string& text, const std::string& itemId, bool isHabit, int durationMinutes,
-                       GfxRenderer& renderer, MappedInputManager& mappedInput);
+void beginFocusSession(const std::string& text, const std::string& itemId, int durationMinutes, GfxRenderer& renderer,
+                       MappedInputManager& mappedInput);
 
 // Durations a focus session can be started for, in minutes -- index-matched
 // with focusSessionDurationOptions()'s labels below.

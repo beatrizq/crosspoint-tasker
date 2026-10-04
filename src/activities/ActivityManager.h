@@ -6,21 +6,21 @@
 
 #include <atomic>
 #include <cassert>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "activities/network/FileTransferReturn.h"
 #include "util/HomeAppOrder.h"
 #include "util/ScreenshotInfo.h"
 
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
-// TASKS, CALENDAR, BUDGET and HABITS are a tile and a screen each. The first
-// three shared one screen with a three-way tab bar until each grew tabs of its
-// own; HABITS joined them as a fourth.
+// TASKS and CALENDAR are a tile and a screen each.
 enum class HomeMenuItem {
   NONE,
   READ_MENU,
@@ -28,8 +28,6 @@ enum class HomeMenuItem {
   RECENTS,
   TASKS,
   CALENDAR,
-  BUDGET,
-  HABITS,
   OPDS_BROWSER,
   FILE_TRANSFER,
   SETTINGS_MENU,
@@ -113,41 +111,37 @@ class ActivityManager {
   // returnToReadMenu routes that screen's own Back button to ReadMenuActivity
   // instead of Home -- set only by ReadMenuActivity itself, since every other
   // caller of these four still expects Back to land on Home as before.
-  void goToFileTransfer(bool returnToReadMenu = false);
+  void goToFileTransfer(FileTransferReturn returnTo = FileTransferReturn::Home);
   void goToSettings();
   void goToFileBrowser(std::string path = {}, bool returnToReadMenu = false);
   void goToRecentBooks(bool returnToReadMenu = false);
   // initialTab is an index into the target screen's tab bar; the header cannot
   // name those types without pulling the activities in. Out-of-range values are
-  // clamped to the first tab by OrganizerScreenActivity::onEnter(), which matters
-  // for Budget: its tab count follows how many accounts are cached.
-  // selectTaskId/selectHabitId, when non-empty, land the screen on that
-  // specific task/habit's row instead of row 0 -- see TasksActivity's and
-  // HabitsActivity's own constructor comments.
-  void goToTasks(uint8_t initialTab = 0, std::string selectTaskId = "");  // 0 = All
+  // clamped to the first tab by OrganizerScreenActivity::onEnter().
+  // selectTaskId, when non-empty, lands the screen on that specific task's row
+  // instead of row 0 -- see TasksActivity's own constructor comment.
+  void goToTasks(uint8_t initialTab = 0, std::string selectTaskId = "");  // 0 = first tab
   void goToCalendar();
-  void goToBudget(uint8_t initialTab = 0);  // 0 = Plan
-  void goToHabits(std::string selectHabitId = "");
   // Only reachable when ENABLE_BLE_NOTIFY_SPIKE is defined -- see
   // BleNotifyRelay's own doc comment. HomeActivity never offers this tile
   // otherwise, so no caller outside that build should ever invoke it.
   void goToBleNotifications();
-  // Syncs every configured integration over one Wi-Fi association.
-  void goToSyncAll();
+  // Syncs every configured integration over one Wi-Fi association. onReturn
+  // reopens whichever screen's status bar this was reached from -- see
+  // SyncAllActivity's own comment; defaults to Home for a caller with no
+  // particular screen to return to.
+  void goToSyncAll(std::function<void()> onReturn = nullptr);
   void goToReadMenu();
   void goToBrowser(bool returnToReadMenu = false);
   void goToReader(std::string path, bool allowFastInitialRefresh = false);
-  void goToSleep(bool fromTimeout = false);
+  void goToSleep(bool fromTimeout = false, bool forceQuickResume = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE);
-  // Opens the companion screen fresh -- a new quickpick::roll(), the same
-  // "fresh visit" treatment HomeActivity::onEnter() gives its own tile (see
-  // its own homeSuggestionText comment) and main.cpp's boot-to-companion
-  // path use, rather than resuming whatever suggestion was last held. No-op
-  // when the companion is disabled -- see FRONT_BUTTON_HARDWARE/goToApp()'s
-  // own reasoning: nothing should call this for a hidden tile anyway.
+  // Opens the companion screen fresh -- the same screen goHome() itself
+  // opens (see QuickPickActivity's own header comment); this exists as its
+  // own entry point for goToApp()'s AppId::Companion case.
   void goToCompanion();
   // Dispatches to whichever of the goTo* methods above opens `id`'s own
   // screen -- the side Left/Right "previous/next app" shortcut every app

@@ -20,19 +20,12 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   bool showBootScreen = true;
-  // Mirrors lastSleepFromReader for the companion's quick-pick reveal screen,
-  // so waking from sleep can put the same pick back up instead of dropping to
-  // Home. The pick's own content lives in the three fields below, kept in
-  // sync by QuickPickActivity itself (written on entry) rather than fished
-  // out reactively at sleep time -- there is no RTTI in this build to safely
-  // downcast the current Activity and read it that way.
+  // Mirrors lastSleepFromReader for the companion's own screen, so waking
+  // from sleep can reopen it instead of dropping to Home -- there is no RTTI
+  // in this build to safely downcast the current Activity and check that
+  // reactively at sleep time, so main.cpp's own isQuickPickActivity() check
+  // stamps this here instead.
   bool lastSleepFromQuickPick = false;
-  std::string quickPickText;
-  // Todoist task id / Habitify habit id behind quickPickText, so resuming
-  // this screen after sleep can still jump straight to that row.
-  std::string quickPickItemId;
-  bool quickPickIsHabit = false;
-  bool quickPickPoolEmpty = false;
 
   // A running focus session, mirrored on start (organizerActions::beginFocusSession)
   // and cleared once consumed (FocusSessionActivity, once the countdown
@@ -42,10 +35,13 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // wall clock at boot rather than via a lastSleepFromX flag like the quick-pick
   // fields above: a stale flag from a session that already finished needs telling
   // apart from a live one, and the end time itself already does that.
+  // Which Todoist filter the Companion's lists show: 0 = Filter 1, 1 = Filter 2
+  // (the two side buttons). Persisted so a reboot keeps the view.
+  uint8_t todoistActiveFilter = 0;
+
   bool focusSessionActive = false;
   std::string focusSessionText;
   std::string focusSessionItemId;
-  bool focusSessionIsHabit = false;
   // Absolute end time as (UTC day number * 1440) + minute-of-day, comparable
   // across a reboot without any calendar bookkeeping -- see
   // companion::localDayNumber() and organizerActions::computeFocusSessionEnd().
@@ -55,6 +51,17 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // HalClock::formatHourMinute()).
   uint8_t focusSessionEndHour = 0;
   uint8_t focusSessionEndMinute = 0;
+
+  // A running timed Focus/Break session (see CompanionSessionActivity, which
+  // nothing starts any more -- these stay false) -- same resume story as
+  // focusSessionActive above, kept as its own separate set of fields rather
+  // than reusing those since this session has no task item attached,
+  // just a fixed companion::Mood override.
+  bool companionSessionActive = false;
+  uint8_t companionSessionMood = 0;  // companion::Mood::Focus or ::Break, cast to uint8_t
+  int32_t companionSessionEndAbsMinutes = 0;
+  uint8_t companionSessionEndHour = 0;
+  uint8_t companionSessionEndMinute = 0;
 
   static const char* getFilePath() { return "/.crosspoint/state.json"; }
   void toJson(JsonDocument& doc) const;

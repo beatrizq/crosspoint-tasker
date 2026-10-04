@@ -24,6 +24,10 @@ struct TodoistCompletedLogEntry {
   std::string title;
   std::string taskId;
   bool pending = false;
+  // Which filter(s) the task belonged to when it was completed, the same bits as
+  // TodoistTask::filterMask -- the Logs tab shows only the active filter's. An
+  // entry from before there were two filters counts for both.
+  uint8_t filterMask = TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT;
 };
 
 /**
@@ -63,8 +67,8 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   friend class PersistableStore<TodoistTaskCache>;
 
  public:
-  static constexpr size_t MAX_TASKS = TODOIST_MAX_TASKS;
-  static constexpr size_t MAX_PENDING = TODOIST_MAX_TASKS;
+  static constexpr size_t MAX_TASKS = TODOIST_MAX_CACHED_TASKS;
+  static constexpr size_t MAX_PENDING = TODOIST_MAX_CACHED_TASKS;
 
   static const char* getFilePath() { return "/.crosspoint/todoist_tasks.json"; }
   void toJson(JsonDocument& doc) const;
@@ -88,7 +92,26 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   // due strictly before it is flagged. An empty date leaves the stored date
   // untouched and clears no flags, so a sync that could not establish today
   // keeps showing the last date it did know.
-  void setTasks(std::vector<TodoistTask>&& fetched, const std::string& date);
+  // Refreshes `filterBit`'s slice of the task list from a fresh fetch, without
+  // touching any task that belongs only to the *other* filter bit: an existing
+  // task tagged with filterBit that the fetch no longer contains loses just that
+  // bit (and is dropped only if that leaves it belonging to nothing); a fetched
+  // task already known under the other filter (matched by id) has its fields
+  // refreshed and gains filterBit rather than becoming a duplicate row; anything
+  // else is a new row, tagged filterBit, capped at MAX_TASKS.
+  //
+  // Called once per filter rather than once for a combined, pre-merged list, so
+  // a sync commits each filter's own fetch the moment it arrives (peak memory:
+  // the existing cache plus one fetched list, never both fetches plus the old
+  // cache plus a merged copy at once) *and* a later filter's fetch failing can
+  // never wipe what an earlier filter's already-committed fetch just wrote --
+  // the previous approach's wholesale replace-then-merge silently emptied every
+  // other-filter tab whenever the second request failed. `date` updates syncDate
+  // when non-empty (pass "" for a second filter that isn't the sync's clock
+  // source); filterBit covers both bits for a single fetch that is authoritative
+  // for the whole list (the two filters being the same query), reproducing a
+  // plain full replace.
+  void setTasksForFilter(std::vector<TodoistTask>&& fetched, uint8_t filterBit, const std::string& date);
 
   // Drop the task locally and remember to close it on the server. No-op for an
   // unknown index.
@@ -129,9 +152,12 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   // that lands in setCompletedToday() is authoritative and replaces both
   // together, so entries can briefly outrun/undershoot the count between a
   // local press and the next sync the same way completedToday itself can be
-  // stale (see its own comment). Capped at MAX_COMPLETED_TODAY_TITLES.
+  // stale (see its own comment). Capped at MAX_COMPLETED_STORED.
   const std::vector<TodoistCompletedLogEntry>& getCompletedTodayEntries() const { return completedTodayEntries; }
+  // Entries kept per filter, and in total: two filters' logs are stored side by
+  // side, so the cache holds twice one filter's worth.
   static constexpr size_t MAX_COMPLETED_TODAY_TITLES = 20;
+  static constexpr size_t MAX_COMPLETED_STORED = MAX_COMPLETED_TODAY_TITLES * 2;
 
   // Sets today's completed count and titles directly, from a fetch that
   // already reflects the whole day: this device's own presses once pushed,
@@ -139,11 +165,21 @@ class TodoistTaskCache : public PersistableStore<TodoistTaskCache> {
   // than adds - the fetch is authoritative for the day, not incremental - and
   // marks completedDay resolved so a completion pressed on-device later the
   // same day still adds on top of this baseline instead of rolling over
-  // first. titles is moved from and truncated to MAX_COMPLETED_TODAY_TITLES;
-  // every resulting entry is Synced (pending=false, taskId="") -- a fetch is
-  // by definition already confirmed by the server, with no push left to
-  // cancel.
-  void setCompletedToday(uint16_t count, const std::string& date, std::vector<std::string>&& titles);
+  // first. entries is moved from and truncated to MAX_COMPLETED_STORED; every
+  // one is Synced (pending=false) -- a fetch is by definition already confirmed
+  // by the server, with no push left to cancel.
+  // Same idea as setTasksForFilter(), for today's completed-task log: refreshes
+  // `filterBit`'s entries from a fresh fetch without touching rows that belong
+  // only to the other filter, so a later filter's fetch failing can never erase
+  // an earlier one's already-committed Logs entries. Every entry from a fetch is
+  // Synced (pending=false) -- a fetch is by definition already confirmed by the
+  // server, with no push left to cancel. completedToday becomes the whole list's
+  // size (both filters combined) after the call. `date` updates completedDay's
+  // resolution the same way setTasksForFilter()'s does; pass "" for a second
+  // filter. filterBit covering both bits reproduces a plain full replace, for a
+  // single fetch authoritative for the whole day.
+  void setCompletedForFilter(std::vector<TodoistCompletedLogEntry>&& entries, uint8_t filterBit,
+                             const std::string& date);
 
   // Cancels one Cached (not yet pushed) Logs-screen row: removes it from
   // completedTodayEntries, decrements completedToday, and cancels its queued

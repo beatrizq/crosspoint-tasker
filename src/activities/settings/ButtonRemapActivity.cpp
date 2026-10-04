@@ -115,7 +115,7 @@ void ButtonRemapActivity::render(RenderLock&&) {
                     tr(STR_REMAP_PROMPT));
 
   int topOffset = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-  int contentHeight = pageHeight - topOffset - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  int contentHeight = pageHeight - topOffset - metrics.buttonHintsHeight - metrics.buttonHintsGap;
   GUI.drawList(
       renderer, Rect{0, topOffset, pageWidth, contentHeight}, kRoleCount, currentStep,
       [&](int index) { return getRoleName(static_cast<uint8_t>(index)); }, nullptr, nullptr,

@@ -23,8 +23,6 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "GCalStore.h"
-#include "HabitifyHabitCache.h"
-#include "HabitifyStore.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
@@ -32,10 +30,9 @@
 #include "SdCardFontSystem.h"
 #include "TodoistStore.h"
 #include "TodoistTaskCache.h"
-#include "YnabAccountCache.h"
-#include "YnabStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/home/CompanionSessionActivity.h"
 #include "activities/home/FocusSessionActivity.h"
 #include "activities/home/QuickPickActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
@@ -207,19 +204,18 @@ static bool loadSleepFrameBuffer() {
   return true;
 }
 
-// Enter deep sleep mode
-void enterDeepSleep(bool fromTimeout = false) {
+// Enter deep sleep mode. forceQuickResume: the release-triggered short-press
+// branch below passes true, since a genuine short press means Quick Resume
+// regardless of fromTimeout/timeoutSleepScreen -- those two only ever decide
+// the automatic, inactivity-timeout case.
+void enterDeepSleep(bool fromTimeout = false, bool forceQuickResume = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
-  // QuickPickActivity keeps quickPickText/isHabit/poolEmpty current on its own
-  // (see its onEnter()); this flag just says whether that content is what was
-  // actually up when sleep was entered.
   APP_STATE.lastSleepFromQuickPick = activityManager.isQuickPickActivity();
 
   const bool isQuickResumeSleep =
-      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
-      (fromTimeout &&
-       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
+      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME || forceQuickResume ||
+      (fromTimeout && SETTINGS.timeoutSleepScreen == CrossPointSettings::TIMEOUT_SLEEP_SCREEN::TIMEOUT_QUICK_RESUME);
   APP_STATE.showBootScreen = !isQuickResumeSleep;
 
   APP_STATE.saveToFile();
@@ -227,7 +223,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
   deepSleepInProgress = true;
-  activityManager.goToSleep(fromTimeout);
+  activityManager.goToSleep(fromTimeout, forceQuickResume);
 
   if (isQuickResumeSleep) {
     saveSleepFrameBuffer();
@@ -334,46 +330,30 @@ void setup() {
   OPDS_STORE.loadFromFile();
   TODOIST_STORE.loadFromFile();
   GCAL_STORE.loadFromFile();
-  YNAB_STORE.loadFromFile();
-  // Sync All's Budget step (OrganizerSync.cpp's runBudget()) refreshes every
-  // *already-known* account's transactions without re-fetching the account
-  // list itself -- it reads YNAB_ACCOUNTS.getAccounts() to know which ids to
-  // ask for. Same reasoning as the caches below: SyncAllActivity reboots on
-  // exit whenever WiFi was activated, so relying on whatever was in RAM before
-  // that reboot means a Sync All triggered before ever opening the Budget
-  // screen this session sees an empty account list and silently skips every
-  // transaction refresh -- the account tab then just shows whatever was
-  // already cached, unchanged, with no error surfaced anywhere.
-  YNAB_ACCOUNTS.loadFromFile();
-  HABITIFY_STORE.loadFromFile();
   // Loaded unconditionally, not just when the companion is enabled: a wake from
   // deep sleep re-runs setup(), so gating on the setting means turning the
   // companion off, waking, then back on leaves the in-memory ledger at defaults
   // — and the next save overwrites a real streak with zeroes. Missing file on
   // first run is expected and leaves the defaults in place.
   COMPANION_STATE.loadFromFile();
-  // The companion's mood is derived live from these two caches (today's
-  // completed tasks, today's completed habits), not from anything banked in
-  // CompanionState. Without this, Home would show a default-constructed
-  // (empty) count on every fresh boot until the user happened to open Tasks
-  // or Habits, which are the only other callers of loadFromFile() on these —
-  // making the mood look reset even though nothing was actually lost.
+  // The companion's mood is derived live from this cache (today's completed
+  // tasks), not from anything banked in CompanionState. Without this, Home
+  // would show a default-constructed (empty) count on every fresh boot until
+  // the user happened to open Tasks, the only other caller of loadFromFile()
+  // on it -- making the mood look reset even though nothing was actually lost.
   TODOIST_TASKS.loadFromFile();
-  HABITIFY_HABITS.loadFromFile();
   // Retires a day-old completion log before the companion ever reads it this
   // boot, using whatever the clock already knows -- no WiFi/NTP forced here,
   // since boot must not block on the network. This is what catches the
   // common case (the device sat in deep sleep and its clock tracked the days
-  // correctly the whole time); organizerSync::runTasks()/runHabits() cover
+  // correctly the whole time); organizerSync::runTasks() covers
   // the other case, where the clock itself was only wrong until a sync
-  // corrected it. See TodoistTaskCache::clearCompletedIfStale() and
-  // HabitifyHabitCache::rolloverIfStale()'s own comments for what this is
-  // protecting against.
+  // corrected it. See TodoistTaskCache::clearCompletedIfStale()'s own
+  // comment for what this is protecting against.
   {
     uint16_t year;
     uint8_t month, day, hour, minute;
     if (halClock.getUtcDateTime(year, month, day, hour, minute)) {
-      if (HABITIFY_HABITS.rolloverIfStale(civil::packDate(year, month, day))) HABITIFY_HABITS.saveToFile();
       TODOIST_TASKS.clearCompletedIfStale(
           civil::dateFromIso(organizerSync::localIsoDateFromUtc(year, month, day, hour, minute).c_str()));
     }
@@ -502,14 +482,21 @@ void setup() {
     // against the wall clock, not here.
     activityManager.replaceActivity(std::make_unique<FocusSessionActivity>(
         renderer, mappedInputManager, APP_STATE.focusSessionText, APP_STATE.focusSessionItemId,
-        APP_STATE.focusSessionIsHabit, APP_STATE.focusSessionEndAbsMinutes, APP_STATE.focusSessionEndHour,
-        APP_STATE.focusSessionEndMinute));
+        APP_STATE.focusSessionEndAbsMinutes, APP_STATE.focusSessionEndHour, APP_STATE.focusSessionEndMinute));
+  } else if (APP_STATE.companionSessionActive) {
+    // Same reasoning as the focus-session branch above, for a Companion
+    // screen Focus/Break session instead of a task-linked one (see
+    // CompanionSessionActivity) -- no Back-held escape hatch, and whether
+    // the lock is actually still in effect is resolved by
+    // CompanionSessionActivity's own onEnter() against the wall clock.
+    activityManager.replaceActivity(std::make_unique<CompanionSessionActivity>(
+        renderer, mappedInputManager, static_cast<companion::Mood>(APP_STATE.companionSessionMood),
+        APP_STATE.companionSessionEndAbsMinutes, APP_STATE.companionSessionEndHour,
+        APP_STATE.companionSessionEndMinute));
   } else if (APP_STATE.lastSleepFromQuickPick && !mappedInputManager.isPressed(MappedInputManager::Button::Right1)) {
     // Same escape hatch as the reader branch below: holding Back on wake skips
-    // straight to home instead of putting the old pick back up.
-    activityManager.replaceActivity(std::make_unique<QuickPickActivity>(
-        renderer, mappedInputManager, APP_STATE.quickPickText, APP_STATE.quickPickItemId, APP_STATE.quickPickIsHabit,
-        APP_STATE.quickPickPoolEmpty));
+    // straight to home instead of reopening the companion screen.
+    activityManager.replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInputManager));
   } else if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
              mappedInputManager.isPressed(MappedInputManager::Button::Right1) ||
              APP_STATE.readerActivityLoadCount > 0) {
@@ -636,7 +623,27 @@ void loop() {
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;
     }
+    // Held past the threshold: a deliberate press either way, so this always
+    // sleeps with the ordinary Sleep Screen mode -- Quick Resume's own
+    // short-press case is the *other* branch below, which only fires on an
+    // early release, never here.
     enterDeepSleep();
+    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+    return;
+  }
+
+  // Short Power Button Click == Quick Resume: released before the threshold
+  // above was reached, so this was a genuine short press rather than the
+  // ordinary held-to-sleep gesture -- sleep now, forcing Quick Resume
+  // regardless of the configured Sleep Screen mode. getPowerButtonHeldTime()
+  // still reports the just-ended press's own duration once released (it does
+  // not reset to 0), so this and the branch above are mutually exclusive: one
+  // fires while still held (never reaching this point), the other only once
+  // released short of it.
+  if (millis() >= allowSleepAt && SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SHORT_PWRBTN_QUICK_RESUME &&
+      gpio.wasReleased(HalGPIO::BTN_POWER) && !gpio.isPressed(HalGPIO::BTN_DOWN) &&
+      gpio.getPowerButtonHeldTime() < SETTINGS.getPowerButtonDuration()) {
+    enterDeepSleep(/*fromTimeout=*/false, /*forceQuickResume=*/true);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
   }

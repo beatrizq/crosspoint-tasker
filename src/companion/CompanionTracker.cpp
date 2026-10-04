@@ -1,6 +1,5 @@
 #include "CompanionTracker.h"
 
-#include <HabitifyHabitCache.h>
 #include <HalClock.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -23,8 +22,8 @@ int32_t signedUtcOffsetQuarterHours() {
 
 // Builds the mood ladder's thresholds from the user's settings, clamped
 // defensively so evaluate() and creditQualifyingDay() never see an invalid
-// configuration -- CompanionSettingsActivity already keeps happyPoints above
-// satisfiedPoints and both fields >= 1 on every edit, but this is the one
+// configuration -- CompanionSettingsActivity already keeps satisfiedPoints <
+// happyPoints < amazedPoints and every field >= 1 on every edit, but this is the one
 // place every reader goes through, so it is also the backstop against a
 // hand-edited settings.json or a write that reached CrossPointSettings some
 // other way (e.g. the web settings API, which clamps each field to its own
@@ -34,12 +33,11 @@ companion::MoodThresholds thresholdsFromSettings() {
   companion::MoodThresholds t;
   t.satisfiedPoints = std::max<uint16_t>(1, SETTINGS.companionSatisfiedPoints);
   t.happyPoints = std::max<uint16_t>(static_cast<uint16_t>(t.satisfiedPoints + 1), SETTINGS.companionHappyPoints);
+  t.amazedPoints = std::max<uint16_t>(static_cast<uint16_t>(t.happyPoints + 1), SETTINGS.companionAmazedPoints);
   t.neglectedDays = std::max<uint8_t>(1, SETTINGS.companionNeglectedDays);
   return t;
 }
 }  // namespace
-
-bool CompanionTracker::isEnabled() { return SETTINGS.companionEnabled != 0; }
 
 companion::CompanionId CompanionTracker::activeId() {
   const uint8_t id = SETTINGS.companionId;
@@ -66,11 +64,10 @@ bool CompanionTracker::resolveLocalDayAndMinute(int32_t& outDay, uint16_t& outMi
   // that exact moment (still unsynced, or a full power loss reset it), the
   // boot-time check silently skips and nothing else ever retries it, leaving
   // a previous day's completions showing as "today's" until the user happens
-  // to open Tasks/Habits/Sync All. This runs on every mood/day resolution
+  // to open Tasks/Sync All. This runs on every mood/day resolution
   // instead - i.e. every time Home or the companion's own screen is viewed -
   // so a clock that only becomes valid later still gets the stale data
   // cleared the next time either is looked at.
-  if (HABITIFY_HABITS.rolloverIfStale(civil::packDate(year, month, day))) HABITIFY_HABITS.saveToFile();
   TODOIST_TASKS.clearCompletedIfStale(
       civil::dateFromIso(organizerSync::localIsoDateFromUtc(year, month, day, hour, minute).c_str()));
 
@@ -97,28 +94,17 @@ void CompanionTracker::refreshDay() {
   localMinuteOfDay = minuteOfDay;
 }
 
-void CompanionTracker::refreshForDisplay() {
-  if (!isEnabled()) return;
-  refreshDay();
-}
-
-uint16_t CompanionTracker::liveHabitsCompletedToday() {
-  const auto& habits = HABITIFY_HABITS.getHabits();
-  return static_cast<uint16_t>(
-      std::count_if(habits.begin(), habits.end(), [](const HabitifyHabit& h) { return h.isComplete(); }));
-}
+void CompanionTracker::refreshForDisplay() { refreshDay(); }
 
 void CompanionTracker::recordActivity() {
-  if (!isEnabled()) return;
   // The day can have rolled over since this screen was entered (reading past
   // midnight is a reader concern, but a completion right after waking the
   // device is not), so re-resolve it before crediting.
   refreshDay();
 
   const uint16_t tasksToday = TODOIST_TASKS.getCompletedToday();
-  const uint16_t habitsToday = liveHabitsCompletedToday();
 
-  if (!COMPANION_STATE.recordActivity(localDay, clockValid, tasksToday, habitsToday, thresholdsFromSettings())) return;
+  if (!COMPANION_STATE.recordActivity(localDay, clockValid, tasksToday, thresholdsFromSettings())) return;
   if (!COMPANION_STATE.saveToFile()) {
     LOG_ERR("COMP", "Failed to save companion state");
   }
@@ -126,8 +112,7 @@ void CompanionTracker::recordActivity() {
 
 companion::MoodInput CompanionTracker::buildMoodInput(const companion::MoodThresholds& thresholds) const {
   const uint16_t tasksToday = TODOIST_TASKS.getCompletedToday();
-  const uint16_t habitsToday = liveHabitsCompletedToday();
-  return companion::moodInputFor(COMPANION_STATE.ledger, localDay, clockValid, tasksToday, habitsToday, thresholds);
+  return companion::moodInputFor(COMPANION_STATE.ledger, localDay, clockValid, tasksToday, thresholds);
 }
 
 bool CompanionTracker::isWithinSleepWindow() const {
@@ -139,38 +124,26 @@ bool CompanionTracker::isWithinSleepWindow() const {
 }
 
 companion::Mood CompanionTracker::currentMood() const {
-  // Sleeping is checked first, ahead of even Milestone: a beaten record is
-  // still worth celebrating, but not while the companion should visually read
-  // as asleep. milestoneDay is a day-scoped flag that survives the wait --
-  // nothing is lost, only deferred until the companion is awake again with
-  // that same local day still current.
+  // Sleeping is checked first: a companion that should visually read as asleep
+  // does so whatever it has earned today.
   if (isWithinSleepWindow()) return companion::Mood::Sleeping;
 
+  // Nothing left to do: after a sync, no task that is overdue or due today, in
+  // either Todoist filter (the cache holds both filters' tasks, so this is the
+  // union), means everything urgent has been done and the companion takes a
+  // break. Undated and upcoming tasks do not count against it. Requires a sync
+  // to have happened -- an empty cache on a device that never synced is "no
+  // data yet", not "all done". Checked ahead of the ladder on purpose: while
+  // this holds it is the mood, however many tasks were done today.
+  if (TODOIST_TASKS.hasSynced() && TODOIST_TASKS.getDueTodayOrOverdueCount() == 0) return companion::Mood::Break;
+
   const auto thresholds = thresholdsFromSettings();
-  const auto in = buildMoodInput(thresholds);
-  // A beaten best-day-points record holds the companion at the Milestone mood
-  // for the rest of the day it was earned (see CompanionState::milestoneDay),
-  // ahead of the usual ladder. Gated on clockValid: without a fresh reading,
-  // localDay is whatever the last valid one was, and comparing a stale day
-  // against milestoneDay could match (or fail to) by accident.
-  if (clockValid && COMPANION_STATE.milestoneDay == localDay) {
-    const uint32_t points = static_cast<uint32_t>(in.tasksCompletedToday) + in.habitsCompletedToday;
-    // Re-checked against live points rather than trusted as a one-shot flag:
-    // normal completions only ever add to today's total, so this is always
-    // true for the rest of a normal day, but today's live count can also
-    // drop if something completed earlier gets undone (in the Todoist/
-    // Habitify app, synced back down) -- at that point the record it
-    // claimed is no longer actually true right now, and the ladder should
-    // reflect today's live count the same as any other day.
-    if (points >= COMPANION_STATE.ledger.bestDayPoints) return companion::Mood::Milestone;
-  }
-  return companion::evaluate(in, thresholds);
+  return companion::evaluate(buildMoodInput(thresholds), thresholds);
 }
 
 uint16_t CompanionTracker::pointsToday() const {
   const auto in = buildMoodInput(thresholdsFromSettings());
-  const uint32_t total = static_cast<uint32_t>(in.tasksCompletedToday) + in.habitsCompletedToday;
-  return static_cast<uint16_t>(total > UINT16_MAX ? UINT16_MAX : total);
+  return in.tasksCompletedToday;
 }
 
 std::string CompanionTracker::formatAge(const int32_t activatedDay) {

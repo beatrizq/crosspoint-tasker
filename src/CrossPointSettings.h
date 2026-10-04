@@ -21,15 +21,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     COVER_CUSTOM = 4,
     BLANK = 5,
     QUICK_RESUME = 6,
-    // Captures whatever screen the device was actually showing right before
-    // it went to sleep -- see ActivityManager::goToSleep(), which writes the
-    // outgoing screen's own framebuffer to /sleep.bmp before replacing it
-    // with SleepActivity, the same file and format CUSTOM already renders
-    // from (see SleepActivity::renderCustomSleepScreen()). Replaces the old
-    // per-app "Sleep Screen App" picker (Settings -> Organizer), which only
-    // ever snapshotted one of four organizer screens' own first tab, and only
-    // opportunistically, whenever that screen's own data changed.
-    DYNAMIC = 7,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -156,7 +147,21 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Short power button press actions
-  enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, FORCE_REFRESH = 3, FOOTNOTES = 4, SHORT_PWRBTN_COUNT };
+  enum SHORT_PWRBTN {
+    IGNORE = 0,
+    SLEEP = 1,
+    PAGE_TURN = 2,
+    FORCE_REFRESH = 3,
+    FOOTNOTES = 4,
+    // A genuine short press (released before the ordinary hold-to-sleep
+    // duration) sleeps the device using Quick Resume specifically, regardless
+    // of the chosen Sleep Screen mode; holding it past that duration still
+    // sleeps normally, with whichever Sleep Screen mode is set -- see the
+    // release-triggered branch in main.cpp's loop() and
+    // enterDeepSleep()'s own forceQuickResume parameter.
+    SHORT_PWRBTN_QUICK_RESUME = 5,
+    SHORT_PWRBTN_COUNT
+  };
 
   // Long-press Confirm action while reading an EPUB. The setting cycles through these values.
   // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
@@ -180,8 +185,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // 24 bytes each: a name longer than that is truncated by the tile anyway.
   char tasksNickname[24] = "";
   char calendarNickname[24] = "";
-  char budgetNickname[24] = "";
-  char habitsNickname[24] = "";
   // Same idea, for the companion -- falls back to its own built-in character
   // name (CompanionTracker::displayName()) rather than an app's service name,
   // since the companion has no account behind it to keep listing.
@@ -213,11 +216,17 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   enum TOUCH_READER_CONTROLS { TOUCH_READER_OFF = 0, TOUCH_READER_ON = 1, TOUCH_READER_CONTROLS_COUNT };
 
-  enum QUICK_RESUME_SLEEP_SCREEN {
-    QUICK_RESUME_NEVER = 0,
-    QUICK_RESUME_AFTER_TIMEOUT = 1,
-    QUICK_RESUME_SLEEP_SCREEN_COUNT
-  };
+  // Which manual/automatic sleeps use Quick Resume (a fast partial refresh that
+  // keeps the current screen visible with a moon icon) instead of the chosen
+  // Sleep Screen mode's own image. Applies only when Sleep Screen itself is not
+  // already set to Quick Resume outright, where every sleep already does this
+  // regardless (see enterDeepSleep()'s own isQuickResumeSleep).
+  // Which sleep image an automatic, inactivity-timeout sleep uses -- the manual,
+  // power-button case is a separate setting (shortPwrBtn's own SHORT_PWRBTN_QUICK_RESUME
+  // value). Not consulted at all when Sleep Screen itself is already set to
+  // Quick Resume, where every sleep already does this regardless (see
+  // enterDeepSleep()'s own isQuickResumeSleep).
+  enum TIMEOUT_SLEEP_SCREEN { TIMEOUT_SLEEP = 0, TIMEOUT_QUICK_RESUME = 1, TIMEOUT_SLEEP_SCREEN_COUNT };
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
@@ -231,6 +240,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
+  // Rotates the sleep screen 180 degrees, for a device held or mounted upside
+  // down (see SleepActivity::onEnter()). Not the same as the cover filter's
+  // Inverted option above, which flips black and white rather than the
+  // orientation.
+  uint8_t sleepScreenInvert = 0;
   // Status bar settings
   uint8_t statusBarChapterPageCount = 1;
   uint8_t statusBarBookProgressPercentage = 1;
@@ -312,16 +326,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t embeddedStyle = 1;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
-  // Reading companion: a small character whose mood tracks how much you read.
-  // Off by default so nothing about the stock reader changes unless asked for.
-  uint8_t companionEnabled = 0;
   // Index into companion::COMPANION_SPRITES (0 = the first companion).
   // Persisted numerically, so sprites/order.txt is append-only.
   uint8_t companionId = 0;
-  // Show the mood word and streak/progress line under the companion on Home
-  // (0 = off, 1 = on). Off gives the sprite the freed space to draw a scale
-  // step bigger.
-  uint8_t companionShowMoodLabel = 1;
   // Sleep window the companion shows the Sleeping mood during, local wall-clock
   // time. Default 22:00-07:00. May wrap past midnight (start > end); start ==
   // end means the window never applies (24 awake hours, not 24 asleep).
@@ -330,13 +337,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t companionSleepEndHour = 7;
   uint8_t companionSleepEndMinute = 0;
   // Mood ladder tuning -- see MoodThresholds in lib/Companion/CompanionMood.h.
-  // Combined tasks+habits completed today needed for the top (Happy) tier.
-  // Must stay above companionSatisfiedPoints or Happy becomes unreachable --
-  // CompanionSettingsActivity clamps this on every edit, so these two only
-  // ever land here already valid; CompanionTracker clamps again on read as a
-  // backstop against a hand-edited settings.json.
+  // Tasks completed today needed for the top tier, Amazed. Must stay above
+  // companionHappyPoints or Amazed becomes unreachable.
+  uint8_t companionAmazedPoints = 8;
+  // Tasks completed today needed for the Happy tier.
+  // Must stay above companionSatisfiedPoints (and below companionAmazedPoints)
+  // or Happy becomes unreachable -- CompanionSettingsActivity clamps these on
+  // every edit, so they only ever land here already valid; CompanionTracker
+  // clamps again on read as a backstop against a hand-edited settings.json.
   uint8_t companionHappyPoints = 3;
-  // Combined tasks+habits completed today needed to count as "did something"
+  // Tasks completed today needed to count as "did something"
   // (Satisfied) rather than starting the Cranky/Neglected decay. Must stay
   // >= 1 -- 0 would mean every day, even an empty one, already qualifies,
   // making the decay tiers unreachable.
@@ -366,7 +376,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
-  uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
+  // See TIMEOUT_SLEEP_SCREEN's own comment for what each value means.
+  uint8_t timeoutSleepScreen = TIMEOUT_SLEEP;
 
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;

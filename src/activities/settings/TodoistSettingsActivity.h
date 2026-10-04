@@ -4,16 +4,17 @@
 #include "util/ButtonNavigator.h"
 
 /**
- * Settings submenu for the Todoist integration: enter or clear the API token,
- * plus the hint for where syncing happens (the Today screen, not here).
+ * Settings submenu for the Todoist integration: enter the API token, plus the
+ * hint for where syncing happens (the Today screen, not here).
  */
 class TodoistSettingsActivity final : public Activity {
  public:
   explicit TodoistSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("TodoistSettings", renderer, mappedInput) {}
 
-  // API Token, Sleep Screen, Clear Token, and the non-interactive sync hint row.
-  static constexpr int MENU_ITEMS = 5;
+  // Nickname, API Token, Filter 1 name, Filter 1, Filter 2 name, Filter 2, and
+  // the non-interactive sync hint row.
+  static constexpr int MENU_ITEMS = 7;
 
   void onEnter() override;
   void onExit() override;

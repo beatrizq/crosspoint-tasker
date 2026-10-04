@@ -3,7 +3,8 @@
 namespace companion {
 
 Mood evaluate(const MoodInput& in, const MoodThresholds& t) {
-  const uint32_t points = static_cast<uint32_t>(in.tasksCompletedToday) + in.habitsCompletedToday;
+  const uint32_t points = in.tasksCompletedToday;
+  if (points >= t.amazedPoints) return Mood::Amazed;
   if (points >= t.happyPoints) return Mood::Happy;
 
   // No clock: elapsed days are unknowable, so decay cannot be justified.
@@ -15,7 +16,7 @@ Mood evaluate(const MoodInput& in, const MoodThresholds& t) {
   // this point in the ladder, live points are what they are right now --
   // whether that is because nothing has been done yet today, or because
   // today did clear the bar earlier and something was since undone (synced
-  // back down from the Todoist/Habitify app) -- the mood reflects today's
+  // back down from the Todoist app) -- the mood reflects today's
   // current effort, not a high-water mark from earlier in the day.
   if (in.daysSinceLastActive < t.neglectedDays) return Mood::Cranky;
   return Mood::Neglected;
@@ -64,10 +65,10 @@ bool withinSleepWindow(const uint16_t nowMinuteOfDay, const uint16_t startMinute
 }
 
 bool creditQualifyingDay(DayLedger& ledger, const int32_t today, const uint16_t tasksCompletedToday,
-                         const uint16_t habitsCompletedToday, const MoodThresholds& t) {
+                         const MoodThresholds& t) {
   bool changed = false;
 
-  const uint32_t points = static_cast<uint32_t>(tasksCompletedToday) + habitsCompletedToday;
+  const uint32_t points = tasksCompletedToday;
 
   // First completion that clears the bar today: mark today as the last
   // qualifying day, and shift whatever held that title down into
@@ -80,33 +81,22 @@ bool creditQualifyingDay(DayLedger& ledger, const int32_t today, const uint16_t 
     changed = true;
   }
 
-  // Unlike lastQualifyingDay, this is re-checked every call: today's total
-  // only grows as more is completed, so a new all-time high can land on any
-  // completion, not just the day's first.
-  const uint16_t cappedPoints = static_cast<uint16_t>(points > UINT16_MAX ? UINT16_MAX : points);
-  if (cappedPoints > ledger.bestDayPoints) {
-    ledger.bestDayPoints = cappedPoints;
-    changed = true;
-  }
-
   return changed;
 }
 
 MoodInput moodInputFor(const DayLedger& ledger, const int32_t today, const bool clockValid,
-                       const uint16_t tasksCompletedToday, const uint16_t habitsCompletedToday,
-                       const MoodThresholds& t) {
+                       const uint16_t tasksCompletedToday, const MoodThresholds& t) {
   MoodInput in;
   in.clockValid = clockValid;
   in.tasksCompletedToday = tasksCompletedToday;
-  in.habitsCompletedToday = habitsCompletedToday;
 
   if (!clockValid) return in;
 
   // today is on record as the last qualifying day, but its own live points
   // no longer clear the bar -- something completed earlier today was undone
-  // (in the Todoist/Habitify app, synced back down). today's credit no
+  // (in the Todoist app, synced back down). today's credit no
   // longer counts, so fall back to whichever day held the title before it.
-  const uint32_t points = static_cast<uint32_t>(tasksCompletedToday) + habitsCompletedToday;
+  const uint32_t points = tasksCompletedToday;
   const bool todayStillQualifies = points >= t.satisfiedPoints;
   const int32_t effectiveLastQualifyingDay = (!todayStillQualifies && ledger.lastQualifyingDay == today)
                                                  ? ledger.previousQualifyingDay

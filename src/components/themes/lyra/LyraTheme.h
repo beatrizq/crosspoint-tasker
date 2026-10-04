@@ -36,6 +36,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .homeGridColumns = 3,
                                  .homeGridTileHeight = 130,
                                  .buttonHintsHeight = 40,
+                                 .buttonHintsGap = 8,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
                                  .progressBarMarginTop = 1,
@@ -82,8 +83,8 @@ class LyraTheme : public BaseTheme {
  public:
   // Component drawing methods
   void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const override;
-  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
-                  bool showRule) const override;
+  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle, bool showRule,
+                  bool includeStatusRow) const override;
   void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                      const char* rightLabel = nullptr) const override;
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
@@ -99,7 +100,9 @@ class LyraTheme : public BaseTheme {
                 bool highlightValue, const std::function<bool(int index)>& rowDimmed = nullptr) const override;
   void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                        const char* btn4) const override;
-  void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const override;
+  void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn,
+                           bool topSelected = false, bool bottomSelected = false) const override;
+  int getSideButtonHintsBottom(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const override;
   void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                       const std::function<std::string(int index)>& buttonLabel,
                       const std::function<UIIcon(int index)>& rowIcon) const override;

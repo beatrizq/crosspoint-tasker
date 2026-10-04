@@ -117,7 +117,7 @@ void SyncAllActivity::runAll() {
     if (failure != nullptr) {
       LOG_ERR("SYNCALL", "%s failed: %s", organizerSync::name(organizerSync::serviceAt(i)), failure);
     }
-    // Deliberately not breaking on failure: the four are independent accounts,
+    // Deliberately not breaking on failure: the two are independent accounts,
     // and one expired token should not cost the rest of the run.
   }
 
@@ -133,10 +133,10 @@ void SyncAllActivity::runAll() {
     finished = true;
   }
   // Waited for, not fired and forgotten (see the same reasoning above line 97):
-  // Habits is always the last service in organizerSync's fixed order, so its
+  // Calendar is always the last service in organizerSync's fixed order, so its
   // terminal Done/Failed state has no later iteration to force a confirmed
-  // repaint the way Tasks/Calendar/Budget get for free. An unconfirmed
-  // requestUpdate(true) here left the screen stuck on Habits' last confirmed
+  // repaint the way Tasks gets for free. An unconfirmed
+  // requestUpdate(true) here left the screen stuck on Calendar's last confirmed
   // frame ("Syncing") once the idle timer downclocked the CPU right after this
   // blocking call returned.
   requestUpdateAndWait();
@@ -149,7 +149,11 @@ void SyncAllActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right1) ||
       mappedInput.wasReleased(MappedInputManager::Button::Right2)) {
-    onGoHome();
+    if (onReturn) {
+      onReturn();
+    } else {
+      onGoHome();
+    }
   }
 }
 
@@ -181,7 +185,7 @@ void SyncAllActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SYNC_ALL), nullptr);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 
   if (nothingToDo) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_SYNC_ALL_NOTHING));

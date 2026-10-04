@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+#include "FileTransferReturn.h"
 #include "NetworkModeSelectionActivity.h"
 #include "activities/Activity.h"
 #include "network/CrossPointWebServer.h"
@@ -52,9 +53,9 @@ class CrossPointWebServerActivity final : public Activity {
   // Cached signal-strength bracket (0..4) for the WiFi indicator.
   int lastWifiBars = 0;
 
-  // When set, exiting returns to ReadMenuActivity instead of Home -- set only
-  // by ActivityManager::goToFileTransfer() on behalf of ReadMenuActivity.
-  bool returnToReadMenu = false;
+  // Where exiting goes -- ReadMenuActivity and SettingsActivity ask to come
+  // back to themselves via ActivityManager::goToFileTransfer(); Home otherwise.
+  FileTransferReturn returnTo = FileTransferReturn::Home;
 
   void renderServerRunning() const;
   void renderWifiIndicator(int subHeaderTop) const;
@@ -64,13 +65,13 @@ class CrossPointWebServerActivity final : public Activity {
   void startAccessPoint();
   void startWebServer();
   // Every exit path in this activity funnels through here instead of calling
-  // onGoHome() directly, so returnToReadMenu only needs handling in one place.
+  // onGoHome() directly, so returnTo only needs handling in one place.
   void exitActivity();
 
  public:
   explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                       bool returnToReadMenu = false)
-      : Activity("CrossPointWebServer", renderer, mappedInput), returnToReadMenu(returnToReadMenu) {}
+                                       FileTransferReturn returnTo = FileTransferReturn::Home)
+      : Activity("CrossPointWebServer", renderer, mappedInput), returnTo(returnTo) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

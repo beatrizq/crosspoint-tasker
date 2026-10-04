@@ -5,9 +5,6 @@
 #include <GCalClient.h>
 #include <GCalEventCache.h>
 #include <GCalStore.h>
-#include <HabitifyClient.h>
-#include <HabitifyHabitCache.h>
-#include <HabitifyStore.h>
 #include <HalClock.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -15,10 +12,6 @@
 #include <TodoistClient.h>
 #include <TodoistStore.h>
 #include <TodoistTaskCache.h>
-#include <YnabAccountCache.h>
-#include <YnabCategoryCache.h>
-#include <YnabClient.h>
-#include <YnabStore.h>
 #include <esp_sntp.h>
 #include <time.h>
 
@@ -44,13 +37,24 @@ constexpr int NTP_POLL_ATTEMPTS = 50;
 // ISO dates order correctly as plain strings, and "" loses to any real date.
 const std::string& laterDate(const std::string& a, const std::string& b) { return b > a ? b : a; }
 
-// TodoistCompletedCountParser::TitleSink for the completed-count fetch below:
-// collects titles as the response streams in, capped the same way the cache
-// itself caps them so a busy day never grows this past what setCompletedToday
-// would keep anyway.
-void collectCompletedTitle(void* ctx, const char* content) {
-  auto* titles = static_cast<std::vector<std::string>*>(ctx);
-  if (titles->size() < TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES) titles->emplace_back(content);
+// TodoistCompletedCountParser::ItemSink for the completed-tasks fetches below:
+// collects each item (tagged with the filter it came from) as the response
+// streams in, capped per filter the same way the cache caps its own entries so
+// a busy day never grows this past what setCompletedToday would keep anyway.
+struct CompletedCollector {
+  std::vector<TodoistCompletedLogEntry>* out;
+  uint8_t filterMask;
+};
+
+void collectCompletedItem(void* ctx, const char* id, const char* content) {
+  auto* collector = static_cast<CompletedCollector*>(ctx);
+  if (collector->out->size() >= TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES) return;
+  TodoistCompletedLogEntry entry;
+  entry.title = content;
+  entry.taskId = id;
+  entry.pending = false;
+  entry.filterMask = collector->filterMask;
+  collector->out->push_back(std::move(entry));
 }
 
 /**
@@ -126,49 +130,6 @@ const char* calendarErrorText(const GCalClient::Error error) {
   }
 }
 
-const char* budgetErrorText(const YnabClient::Error error) {
-  switch (error) {
-    case YnabClient::NO_TOKEN:
-    case YnabClient::NO_BUDGET:
-      return tr(STR_YNAB_NOT_CONFIGURED);
-    case YnabClient::AUTH_FAILED:
-      return tr(STR_YNAB_INVALID_TOKEN);
-    case YnabClient::NOT_FOUND:
-      return tr(STR_YNAB_BUDGET_NOT_FOUND);
-    case YnabClient::RATE_LIMITED:
-      return tr(STR_YNAB_RATE_LIMITED);
-    case YnabClient::SERVER_ERROR:
-      return tr(STR_YNAB_SERVER_ERROR);
-    case YnabClient::PARSE_ERROR:
-      return tr(STR_YNAB_BAD_RESPONSE);
-    case YnabClient::LOW_MEMORY:
-      return tr(STR_MEMORY_ERROR);
-    default:
-      return tr(STR_NETWORK_ERROR);
-  }
-}
-
-const char* habitErrorText(const HabitifyClient::Error error) {
-  switch (error) {
-    case HabitifyClient::NO_KEY:
-      return tr(STR_HABITIFY_NO_KEY);
-    case HabitifyClient::AUTH_FAILED:
-      return tr(STR_HABITIFY_KEY_REJECTED);
-    case HabitifyClient::NOT_FOUND:
-      return tr(STR_HABITIFY_HABIT_NOT_FOUND);
-    case HabitifyClient::RATE_LIMITED:
-      return tr(STR_HABITIFY_RATE_LIMITED);
-    case HabitifyClient::SERVER_ERROR:
-      return tr(STR_HABITIFY_SERVER_ERROR);
-    case HabitifyClient::PARSE_ERROR:
-      return tr(STR_HABITIFY_BAD_RESPONSE);
-    case HabitifyClient::LOW_MEMORY:
-      return tr(STR_MEMORY_ERROR);
-    default:
-      return tr(STR_NETWORK_ERROR);
-  }
-}
-
 // -- per-service sync -------------------------------------------------------
 
 const char* runTasks() {
@@ -219,8 +180,7 @@ const char* runTasks() {
       if (error == TodoistClient::NOT_FOUND) {
         // Gone (deleted, or already completed elsewhere) - nowhere left to
         // apply this, and holding it "pending" forever would wedge every
-        // future sync behind it, the same way an orphaned Habitify push once
-        // did (see runHabits()'s own NOT_FOUND handling).
+        // future sync behind it.
         LOG_ERR("OSYNC", "Task %s no longer exists; dropping its pending reschedule", reschedule.taskId.c_str());
         TODOIST_TASKS.clearPendingReschedule(reschedule.taskId);
         error = TodoistClient::OK;
@@ -235,11 +195,24 @@ const char* runTasks() {
     }
   }
 
+  // Both filters: a task either one matches is one row, and one both match
+  // carries both bits (TodoistTask::filterMask). The second fetch is skipped when
+  // both filters are the same query. Each filter's fetch is committed to the
+  // cache the moment it arrives -- via setTasksForFilter(), which only ever
+  // touches that filter's own slice of the list -- rather than merging both
+  // fetches together first and replacing the whole cache once: that held the
+  // old cache, both fetches and the merge result all at once (the peak that
+  // starved the next TLS request of heap), *and* meant a failure fetching the
+  // second filter discarded the first filter's already-fetched data along with
+  // it, wiping every tab under whichever filter's fetch failed even though its
+  // own request had nothing wrong with it.
+  const bool sameFilter = TODOIST_STORE.filtersMatch();
+  const uint8_t bothFiltersBit = TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT;
   std::vector<TodoistTask> fetched;
   std::string serverDate;
   if (error == TodoistClient::OK) {
     resetTaskWatchdogIfSubscribed();
-    error = TodoistClient::fetchTasks(http, fetched, serverDate);
+    error = TodoistClient::fetchTasks(http, TODOIST_STORE.getFilter(), fetched, serverDate);
     resetTaskWatchdogIfSubscribed();
   }
 
@@ -255,34 +228,65 @@ const char* runTasks() {
 
   if (error == TodoistClient::OK) {
     RenderLock lock;
-    TODOIST_TASKS.setTasks(std::move(fetched), today);
+    TODOIST_TASKS.setTasksForFilter(std::move(fetched), sameFilter ? bothFiltersBit : TodoistTask::FILTER_1_BIT, today);
+  }
+  if (error == TodoistClient::OK && !sameFilter) {
+    std::vector<TodoistTask> fetched2;
+    std::string ignoredDate;
+    resetTaskWatchdogIfSubscribed();
+    error = TodoistClient::fetchTasks(http, TODOIST_STORE.getFilter2(), fetched2, ignoredDate);
+    resetTaskWatchdogIfSubscribed();
+    if (error == TodoistClient::OK) {
+      RenderLock lock;
+      TODOIST_TASKS.setTasksForFilter(std::move(fetched2), TodoistTask::FILTER_2_BIT, "");
+    }
   }
 
   // A completed task never shows up in the open-task fetch above, so a task
   // finished in the Todoist app - not on this device - would otherwise never
   // be counted. This asks Todoist directly for today's completions matching
-  // the same Filter setting, so app-side completions credit the companion the
-  // same way Habitify's already do. Best-effort: the open-task list above is
-  // this sync's real job, so a failure here does not fail the sync itself -
-  // it just leaves today's completed count and the companion's credit stale
-  // until the next attempt.
+  // each Filter setting, so app-side completions credit the companion (the count
+  // is what either filter matched) and the Logs tab can show the active filter's
+  // alone (TodoistCompletedLogEntry::filterMask). Best-effort: the open-task
+  // list above is this sync's real job, so a failure here does not fail the sync
+  // itself - it just leaves today's completed count and the companion's credit
+  // stale until the next attempt. Committed per filter, like the tasks above, so
+  // a failure fetching one filter's completions cannot erase the other's.
   if (error == TodoistClient::OK && !today.empty()) {
+    std::vector<TodoistCompletedLogEntry> completed;
+    completed.reserve(TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES);
+    CompletedCollector first{&completed, static_cast<uint8_t>(sameFilter ? bothFiltersBit : TodoistTask::FILTER_1_BIT)};
+    uint16_t ignoredCount = 0;
     resetTaskWatchdogIfSubscribed();
-    uint16_t completedCount = 0;
-    std::vector<std::string> completedTitles;
-    completedTitles.reserve(TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES);
-    const TodoistClient::Error countError =
-        TodoistClient::fetchCompletedCountForDay(http, today, completedCount, collectCompletedTitle, &completedTitles);
+    TodoistClient::Error countError = TodoistClient::fetchCompletedCountForDay(
+        http, TODOIST_STORE.getFilter(), today, ignoredCount, collectCompletedItem, &first);
     resetTaskWatchdogIfSubscribed();
+    bool committed = false;
     if (countError == TodoistClient::OK) {
       RenderLock lock;
-      TODOIST_TASKS.setCompletedToday(completedCount, today, std::move(completedTitles));
-      // Gated on success: a failed fetch means nothing here actually changed,
-      // so there is nothing new to credit.
-      COMPANION.recordActivity();
-    } else {
-      LOG_ERR("OSYNC", "Completed-count fetch failed: %s", TodoistClient::errorString(countError));
+      TODOIST_TASKS.setCompletedForFilter(std::move(completed), sameFilter ? bothFiltersBit : TodoistTask::FILTER_1_BIT,
+                                          today);
+      committed = true;
     }
+    if (countError == TodoistClient::OK && !sameFilter) {
+      std::vector<TodoistCompletedLogEntry> completed2;
+      completed2.reserve(TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES);
+      CompletedCollector second{&completed2, TodoistTask::FILTER_2_BIT};
+      resetTaskWatchdogIfSubscribed();
+      countError = TodoistClient::fetchCompletedCountForDay(http, TODOIST_STORE.getFilter2(), today, ignoredCount,
+                                                            collectCompletedItem, &second);
+      resetTaskWatchdogIfSubscribed();
+      if (countError == TodoistClient::OK) {
+        RenderLock lock;
+        TODOIST_TASKS.setCompletedForFilter(std::move(completed2), TodoistTask::FILTER_2_BIT, "");
+      }
+    }
+    if (countError != TodoistClient::OK) {
+      LOG_ERR("OSYNC", "Completed-tasks fetch failed: %s", TodoistClient::errorString(countError));
+    }
+    // Gated on a fetch having landed: a failed one means nothing here actually
+    // changed, so there is nothing new to credit.
+    if (committed) COMPANION.recordActivity();
   }
 
   // Persists the fetched list and whatever the queue push managed to clear, so a
@@ -347,231 +351,6 @@ const char* runCalendar() {
   return failure;
 }
 
-const char* runBudget() {
-  // One request, and it carries its own month: the balances are month-scoped and
-  // YNAB says which month it answered for, so nothing here needs a clock. That
-  // matters on boards with no RTC, and it keeps this to a single call against a
-  // token allowed 200 requests an hour.
-  std::vector<YnabCategory> fetched;
-  uint16_t month = civil::NO_DATE;
-  resetTaskWatchdogIfSubscribed();
-  // Shared across every YNAB call below (all the same host, api.ynab.com) so
-  // SecureHttpClient's own keep-alive can actually take effect -- see
-  // YnabClient.h's own parameter doc.
-  freeink::SecureHttpClient http;
-  http.setInsecure();
-  const YnabClient::Error error = YnabClient::fetchSelectedCategories(http, fetched, month);
-  resetTaskWatchdogIfSubscribed();
-  if (error != YnabClient::OK) {
-    LOG_ERR("OSYNC", "Plan fetch failed: %s", YnabClient::errorString(error));
-  }
-
-  if (error == YnabClient::OK) {
-    RenderLock lock;
-    YNAB_CATEGORIES.setCategories(std::move(fetched), month);
-  }
-  YNAB_CATEGORIES.saveToFile();
-
-  // Sync All is the one place "sync everything" should actually mean
-  // everything, so every already-known account also gets its transactions
-  // refreshed here - each is its own request against the same 200/hour
-  // allowance BudgetActivity's own per-tab sync is deliberately stingy with
-  // (see YnabAccountCache's own comment), but a user who asked to sync
-  // everything should not have part of one already-configured integration
-  // silently skipped. The account list itself still is not refetched here:
-  // discovering accounts stays a Settings-only action, since that costs its
-  // own request for something that changes about once a year.
-  //
-  // A copy of the ids: setTransactions() mutates the account list as we go,
-  // and the fetch loop should walk the accounts as they stood when it started.
-  std::vector<std::string> accountIds;
-  accountIds.reserve(YNAB_ACCOUNTS.getAccounts().size());
-  for (const auto& account : YNAB_ACCOUNTS.getAccounts()) accountIds.push_back(account.id);
-
-  std::vector<YnabTransaction> transactionsFetched;
-  for (const auto& accountId : accountIds) {
-    resetTaskWatchdogIfSubscribed();
-    uint16_t date = civil::NO_DATE;
-    const YnabClient::Error txError = YnabClient::fetchTransactions(http, accountId, transactionsFetched, date);
-    resetTaskWatchdogIfSubscribed();
-    if (txError == YnabClient::RATE_LIMITED) {
-      LOG_ERR("OSYNC", "Account transaction fetch rate-limited; skipping the rest");
-      break;
-    }
-    if (txError != YnabClient::OK) {
-      LOG_ERR("OSYNC", "Account transaction fetch failed for %s: %s", accountId.c_str(),
-              YnabClient::errorString(txError));
-      continue;
-    }
-    RenderLock lock;
-    YNAB_ACCOUNTS.setTransactions(accountId, std::move(transactionsFetched), date);
-  }
-  if (!accountIds.empty()) YNAB_ACCOUNTS.saveToFile();
-
-  return error == YnabClient::OK ? nullptr : budgetErrorText(error);
-}
-
-const char* runHabits() {
-  // Unlike Tasks, nothing else in this function resolves the clock -- the
-  // journal fetch below trusts Habitify's own server date entirely (see
-  // fetchJournal()'s own comment) and never asks the device what day it
-  // thinks it is. That leaves no chance to notice a stale cache before a
-  // sync, so it is done explicitly here: a real resync (not gated on
-  // halClock.isAvailable() -- configTzTime() inside it already updates the
-  // system clock on every board, RTC chip or not), then a day-rollover check
-  // independent of whether the fetch below succeeds, the same reasoning as
-  // runTasks()'s own clearCompletedIfStale() call.
-  halClock.syncFromNTP();
-  uint16_t year;
-  uint8_t month, day, hour, minute;
-  if (halClock.getUtcDateTime(year, month, day, hour, minute)) {
-    HABITIFY_HABITS.rolloverIfStale(civil::packDate(year, month, day));
-  }
-
-  // Push what is owed before fetching, so the journal that comes back already
-  // reflects it. A copy of the ids and amounts: clearPending() mutates the cache
-  // as we go, and the fetch replaces the list wholesale.
-  struct Owed {
-    std::string id;
-    std::string unit;
-    float amount;
-  };
-  std::vector<Owed> owed;
-  // Reserved against the habit count rather than the number owing: one growth
-  // event is three heap operations, and this runs with a TLS session about to be
-  // opened, where DRAM fragmentation is what breaks the handshake.
-  owed.reserve(HABITIFY_HABITS.getHabits().size());
-  for (const auto& habit : HABITIFY_HABITS.getHabits()) {
-    if (habit.hasPending() && !habit.unitSymbol.empty()) {
-      owed.push_back(Owed{habit.id, habit.unitSymbol, habit.pending});
-    }
-  }
-
-  // Shared across every Habitify call below (all the same host,
-  // api.habitify.me) so SecureHttpClient's own keep-alive can actually take
-  // effect -- see HabitifyClient.h's own parameter doc.
-  freeink::SecureHttpClient http;
-  http.setInsecure();
-
-  HabitifyClient::Error error = HabitifyClient::OK;
-  for (const auto& entry : owed) {
-    resetTaskWatchdogIfSubscribed();
-    const HabitifyClient::Error pushError = HabitifyClient::addLog(http, entry.id, entry.unit, entry.amount);
-    if (pushError == HabitifyClient::NOT_FOUND) {
-      // The habit no longer exists server-side - deleted, or replaced with a new
-      // one in the app. There is nowhere left to push this progress, and unlike
-      // Todoist's closeTask() (a 404 there means "already done", so it counts as
-      // success) a missing habit can never accept a log. Holding it "owed"
-      // forever would wedge every future sync behind it: the fetch below only
-      // runs once every entry here has pushed clean, so the same dead id would
-      // fail again next time, and again after that.
-      LOG_ERR("OSYNC", "Habit %s no longer exists; dropping its unpushed progress", entry.id.c_str());
-      HABITIFY_HABITS.clearPending(entry.id, entry.amount);
-      continue;
-    }
-    if (pushError != HabitifyClient::OK) {
-      error = pushError;
-      LOG_ERR("OSYNC", "Habit push failed for %s: %s", entry.id.c_str(), HabitifyClient::errorString(pushError));
-      break;  // keep the rest owed for the next attempt
-    }
-    HABITIFY_HABITS.clearPending(entry.id, entry.amount);
-  }
-
-  // Complete taps are pushed the same way, via Habitify's dedicated endpoint -
-  // independent of the numeric progress queue above, since completing is "mark
-  // done" rather than "add N". A copy, for the same reason as owed above.
-  if (error == HabitifyClient::OK) {
-    std::vector<std::string> completions;
-    completions.reserve(HABITIFY_HABITS.getHabits().size());
-    for (const auto& habit : HABITIFY_HABITS.getHabits()) {
-      if (habit.pendingComplete) completions.push_back(habit.id);
-    }
-    for (const auto& habitId : completions) {
-      resetTaskWatchdogIfSubscribed();
-      const HabitifyClient::Error completeError = HabitifyClient::completeHabit(http, habitId);
-      if (completeError == HabitifyClient::NOT_FOUND) {
-        // Same reasoning as the progress queue's own NOT_FOUND handling above:
-        // a gone habit can never accept a complete, so holding it queued
-        // forever would wedge every future sync behind it.
-        LOG_ERR("OSYNC", "Habit %s no longer exists; dropping its pending complete", habitId.c_str());
-        HABITIFY_HABITS.clearPendingComplete(habitId);
-        continue;
-      }
-      if (completeError != HabitifyClient::OK) {
-        error = completeError;
-        LOG_ERR("OSYNC", "Habit complete push failed for %s: %s", habitId.c_str(),
-                HabitifyClient::errorString(completeError));
-        break;  // keep the rest queued for the next attempt
-      }
-      HABITIFY_HABITS.clearPendingComplete(habitId);
-    }
-    resetTaskWatchdogIfSubscribed();
-  }
-
-  std::vector<HabitifyHabit> fetched;
-  uint16_t date = civil::NO_DATE;
-  if (error == HabitifyClient::OK) {
-    resetTaskWatchdogIfSubscribed();
-    error = HabitifyClient::fetchJournal(http, fetched, date);
-    resetTaskWatchdogIfSubscribed();
-  }
-
-  // Areas: a second, best-effort fetch for the Habits screen's per-area tabs
-  // -- see HabitifyClient::fetchHabitAreas()'s own doc comment for why this
-  // cannot just be folded into the journal fetch above. Its own failure never
-  // fails the habit sync itself, the same way Todoist's completed-count fetch
-  // treats its own second call: it just leaves the tab set stale until the
-  // next attempt.
-  bool areasFresh = false;
-  std::vector<HabitifyHabitAreaAssignment> areaAssignments;
-  if (error == HabitifyClient::OK) {
-    resetTaskWatchdogIfSubscribed();
-    const HabitifyClient::Error areasError = HabitifyClient::fetchHabitAreas(http, areaAssignments);
-    resetTaskWatchdogIfSubscribed();
-    if (areasError == HabitifyClient::OK) {
-      areasFresh = true;
-    } else {
-      LOG_ERR("OSYNC", "Habit areas fetch failed: %s", HabitifyClient::errorString(areasError));
-    }
-  }
-
-  if (error == HabitifyClient::OK) {
-    RenderLock lock;
-    std::vector<HabitifyArea> areasList;
-    if (areasFresh) {
-      // Join by id: each habit gets its first area (see
-      // HabitifyHabitAreaAssignment's own "first area only" comment), and the
-      // deduped set of areas becomes the tab list.
-      for (auto& fetchedHabit : fetched) {
-        for (const auto& assignment : areaAssignments) {
-          if (assignment.habitId == fetchedHabit.id) {
-            fetchedHabit.areaId = assignment.areaId;
-            break;
-          }
-        }
-      }
-      areasList.reserve(areaAssignments.size());
-      for (const auto& assignment : areaAssignments) {
-        const bool alreadyKnown = std::any_of(areasList.begin(), areasList.end(), [&assignment](const HabitifyArea& a) {
-          return a.id == assignment.areaId;
-        });
-        if (!alreadyKnown) areasList.push_back(HabitifyArea{assignment.areaId, assignment.areaName});
-      }
-    }
-    // Carries over anything still owed - a press that landed between the push
-    // above and this fetch.
-    HABITIFY_HABITS.setHabits(std::move(fetched), date, areasFresh, std::move(areasList));
-    // Catches a habit completed elsewhere (the Habitify app itself, say) that
-    // this device never saw a local press for. Gated on success: a failed
-    // fetch means the cache did not change, so there is nothing new to credit,
-    // and running it anyway would just cost a needless SD write on a sync that
-    // already failed.
-    COMPANION.recordActivity();
-  }
-  HABITIFY_HABITS.saveToFile();
-  return error == HabitifyClient::OK ? nullptr : habitErrorText(error);
-}
-
 }  // namespace
 
 std::string localIsoDateFromUtc(const uint16_t year, const uint8_t month, const uint8_t day, const uint8_t hour,
@@ -588,6 +367,16 @@ std::string localIsoDateFromUtc(const uint16_t year, const uint8_t month, const 
   return std::string(buf);
 }
 
+uint16_t todayLocalDate() {
+  uint16_t year = 0;
+  uint8_t month = 0;
+  uint8_t day = 0;
+  uint8_t hour = 0;
+  uint8_t minute = 0;
+  if (!halClock.getUtcDateTime(year, month, day, hour, minute)) return civil::NO_DATE;
+  return civil::dateFromIso(localIsoDateFromUtc(year, month, day, hour, minute).c_str());
+}
+
 const char* name(const Service service) {
   // The same name the home grid and the app's own screen use, nickname included:
   // a sync list that called an app something else would read as a different app.
@@ -596,10 +385,6 @@ const char* name(const Service service) {
       return homeAppOrder::displayName(homeAppOrder::AppId::Tasks);
     case Service::Calendar:
       return homeAppOrder::displayName(homeAppOrder::AppId::Calendar);
-    case Service::Budget:
-      return homeAppOrder::displayName(homeAppOrder::AppId::Budget);
-    case Service::Habits:
-      return homeAppOrder::displayName(homeAppOrder::AppId::Habits);
   }
   return "";
 }
@@ -612,10 +397,6 @@ bool isConfigured(const Service service) {
       // Linked and told which calendars to read: without a selection the sync has
       // nothing to ask for.
       return GCAL_STORE.hasClientCredentials() && GCAL_STORE.isLinked() && !GCAL_STORE.getSelectedCalendars().empty();
-    case Service::Budget:
-      return YNAB_STORE.isConfigured() && !YNAB_STORE.getSelectedCategories().empty();
-    case Service::Habits:
-      return HABITIFY_STORE.hasApiKey();
   }
   return false;
 }
@@ -626,10 +407,6 @@ const char* run(const Service service) {
       return runTasks();
     case Service::Calendar:
       return runCalendar();
-    case Service::Budget:
-      return runBudget();
-    case Service::Habits:
-      return runHabits();
   }
   return nullptr;
 }
