@@ -228,9 +228,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             StrId::STR_CAT_DISPLAY),
 
         // --- Companion (persisted here, rendered by its own dedicated screen) ---
-        // No enabled/disabled toggle -- the companion's screen is Home (see
-        // ActivityManager::goHome()), so it is always active. No mood-label
-        // toggle either -- the mood label itself was removed from that screen.
+        // The companion's screen is Home (see ActivityManager::goHome()), so it is
+        // always there; showCompanion only hides the figure and its bubble on it.
+        SettingInfo::Toggle(StrId::STR_SHOW_COMPANION, &CrossPointSettings::showCompanion, "showCompanion",
+                            StrId::STR_COMPANION),
         // Sleep window, local wall-clock time -- rendered on-device as two HH:MM
         // rows (CompanionSettingsActivity), but persisted here as four plain
         // bytes since that is what toJson()/fromJson() walk by key.

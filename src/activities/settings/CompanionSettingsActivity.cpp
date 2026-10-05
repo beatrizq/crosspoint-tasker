@@ -21,14 +21,15 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int ROW_NICKNAME = 0;
-constexpr int ROW_SLEEP_START = 1;
-constexpr int ROW_SLEEP_END = 2;
-constexpr int ROW_AMAZED_POINTS = 3;
-constexpr int ROW_HAPPY_POINTS = 4;
-constexpr int ROW_SATISFIED_POINTS = 5;
-constexpr int ROW_NEGLECTED_DAYS = 6;
-constexpr int ROW_RESET = 7;
+constexpr int ROW_SHOW_COMPANION = 0;
+constexpr int ROW_NICKNAME = 1;
+constexpr int ROW_SLEEP_START = 2;
+constexpr int ROW_SLEEP_END = 3;
+constexpr int ROW_AMAZED_POINTS = 4;
+constexpr int ROW_HAPPY_POINTS = 5;
+constexpr int ROW_SATISFIED_POINTS = 6;
+constexpr int ROW_NEGLECTED_DAYS = 7;
+constexpr int ROW_RESET = 8;
 
 // "HH:MM" for a Sleep start/end row's value column -- digits need no
 // translation.
@@ -68,6 +69,9 @@ void CompanionSettingsActivity::stampActivationIfNeeded() {
 
 void CompanionSettingsActivity::handleSelection() {
   switch (selectedIndex) {
+    case ROW_SHOW_COMPANION:
+      SETTINGS.showCompanion = SETTINGS.showCompanion ? 0 : 1;
+      break;
     case ROW_NICKNAME:
       editSettingsText(tr(STR_NICKNAME_ENTER), SETTINGS.companionNickname, sizeof(SETTINGS.companionNickname));
       return;
@@ -276,6 +280,8 @@ void CompanionSettingsActivity::render(RenderLock&&) {
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, MENU_ITEMS, selectedIndex,
       [](int index) -> std::string {
         switch (index) {
+          case ROW_SHOW_COMPANION:
+            return std::string(tr(STR_SHOW_COMPANION));
           case ROW_NICKNAME:
             return std::string(tr(STR_NICKNAME));
           case ROW_SLEEP_START:
@@ -297,6 +303,8 @@ void CompanionSettingsActivity::render(RenderLock&&) {
       nullptr, nullptr,
       [](int index) -> std::string {
         switch (index) {
+          case ROW_SHOW_COMPANION:
+            return std::string(SETTINGS.showCompanion ? tr(STR_STATE_ON) : tr(STR_STATE_OFF));
           case ROW_NICKNAME:
             return std::string(CompanionTracker::displayName());
           case ROW_SLEEP_START:

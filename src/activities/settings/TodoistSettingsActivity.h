@@ -12,9 +12,8 @@ class TodoistSettingsActivity final : public Activity {
   explicit TodoistSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("TodoistSettings", renderer, mappedInput) {}
 
-  // Nickname, API Token, Filter 1 name, Filter 1, Filter 2 name, Filter 2, and
-  // the non-interactive sync hint row.
-  static constexpr int MENU_ITEMS = 7;
+  // Nickname, API Token, Filter, and the non-interactive sync hint row.
+  static constexpr int MENU_ITEMS = 4;
 
   void onEnter() override;
   void onExit() override;

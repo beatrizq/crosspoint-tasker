@@ -30,7 +30,6 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["lastSleepFromReader"] = lastSleepFromReader;
   doc["showBootScreen"] = showBootScreen;
   doc["lastSleepFromQuickPick"] = lastSleepFromQuickPick;
-  doc["todoistActiveFilter"] = todoistActiveFilter;
   doc["focusSessionActive"] = focusSessionActive;
   doc["focusSessionText"] = focusSessionText;
   doc["focusSessionItemId"] = focusSessionItemId;
@@ -65,8 +64,6 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   lastSleepFromReader = doc["lastSleepFromReader"] | false;
   showBootScreen = doc["showBootScreen"] | true;
   lastSleepFromQuickPick = doc["lastSleepFromQuickPick"] | false;
-  todoistActiveFilter = doc["todoistActiveFilter"] | static_cast<uint8_t>(0);
-  if (todoistActiveFilter > 1) todoistActiveFilter = 0;
   focusSessionActive = doc["focusSessionActive"] | false;
   focusSessionText = doc["focusSessionText"] | "";
   focusSessionItemId = doc["focusSessionItemId"] | "";

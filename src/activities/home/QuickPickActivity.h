@@ -15,19 +15,22 @@
  * constructs this instead of HomeActivity, the app's actual Home. Every
  * "Home"/"Apps" button anywhere in the app lands here; the old app-tile grid
  * (HomeActivity) is left fully intact but unreachable. A big pose of the
- * companion's figure, its mood, and a speech bubble -- the newest BLE alert
- * not yet dismissed from here (see CompanionAlertBubble), or a plain
- * mood-flavored idle line once there's none left. Never a task
- * suggestion (that's what the embedded Tasks section below is for), and the
- * companion no longer reacts to anything else (a completion, an event, a
- * ...) -- alerts and idle are the only two things the bubble
- * ever shows. A glance strip sits right under the header -- today's own
- * Google Calendar events, bulleted (see todaysEvents()'s own comment; there
- * can be more than one, so this is a plain bullet, not that one app's own
- * icon), collapsing to nothing when there is genuinely nothing today rather
- * than spending space on a "nothing today" line. The newest BLE alert
- * belongs to the bubble instead of this strip (see the speech bubble
- * description above); glanceNewestAlert() is unused for that reason but kept. The header itself carries no title or
+ * companion's figure, its mood, and a speech bubble holding only the
+ * companion's own remarks -- a plain mood-flavored idle line, or the sleeping
+ * line. Never a task suggestion (that's what the embedded Tasks section below
+ * is for), never a BLE alert, and the companion does not react to anything
+ * else. The figure and bubble can be hidden entirely (Settings -> Companion ->
+ * Show Companion), which hands their space to the Tasks section.
+ *
+ * At the top sit the header and a glance strip -- today's own Google Calendar
+ * events, bulleted (see todaysEvents()'s own comment; there can be more than
+ * one, so this is a plain bullet, not that one app's own icon), collapsing to
+ * nothing when there is genuinely nothing today rather than spending space on
+ * a "nothing today" line. While any BLE alert is pending, the alert area takes
+ * both their places, showing one alert at a time: the newest pending one,
+ * with older ones piled up underneath it. Dismissing it brings the next-newest
+ * up, and so on. Once the last is gone the header and glance strip are back.
+ * The header itself carries no title or
  * subtitle of this screen's own (drawHeader() is called with both nullptr;
  * see render()'s own comment for why) -- the companion's name and its
  * Age/Highscore, shown here on earlier iterations of this screen, are gone.
@@ -40,20 +43,24 @@
  *
  * Straight below the companion figure -- no mood label any more (removed
  * entirely, freeing that space for the section below to sit higher) -- is a
- * scaled-down rendering of the *real* Tasks screen itself: a single thin
- * rule marking where it starts (no title of its own), and its own tab bar
- * (Overdue/Today/Upcoming/No date/Logs, whichever have rows
- * -- there is no "All" tab; the first visible one is the default -- see
+ * scaled-down rendering of the *real* Tasks screen itself: a title row listing
+ * the Todoist projects that have tasks under the Filter setting (see
+ * rebuildProjectEntries()) followed by Logs, the selected one in bold and the
+ * rest regular, with the thick header rule under it (the top line of the tab
+ * bar, no clock/battery row of its own), and its own tab bar
+ * (Overdue/Today/Upcoming/No date, whichever have rows for the selected
+ * project -- there is no "All" tab; the first visible one is the default; Logs
+ * is selected from the title row like a project and shows today's completions
+ * with no tab bar -- see
  * activities/organizer/TaskTabModel.h, shared with the real TasksActivity
  * screen so the two never disagree about which task is in which tab),
  * confined to the space budget below the companion figure
  * (COMPANION_BUDGET_PERCENT). Acting on a row here updates the mood right
  * where it's shown, without leaving to the real screen. The side Up/Down
- * buttons (labelled F1/F2, see below) switch which of the two Todoist filters
- * (Settings -> Todoist -> Filter 1 / Filter 2) the section shows -- the tabs
- * are the same for both. Note that this screen has no button that opens the
- * real Tasks screen: the side buttons that used to cycle apps now switch
- * filters, and Right1 on the tab bar is Random.
+ * buttons (unlabelled, see below) step to the previous/next entry of the title
+ * row, wrapping. Note that this screen has no button that opens the real Tasks
+ * screen: the side buttons that used to cycle apps now step through projects,
+ * and Right1 on the tab bar is Random.
  *
  * Reconstructed on boot from CrossPointState when the device was showing
  * this screen at the moment it went to sleep (see
@@ -64,9 +71,10 @@
  *
  * Button IDs used here: Left1/Left2 are the pair that moves focus; Right1/
  * Right2 are the pair printed "Apps"/"Select" on the case. Focus (see the
- * Focus enum) cycles through four stops in one continuous circular loop, in
+ * Focus enum) cycles through its stops (the alert area standing in for the
+ * header and glance strip while alerts are pending) in one continuous circular loop, in
  * visual top-to-bottom order -- the header, the glance strip, the companion
- * figure, then the embedded Tasks section -- wrapping back to the header
+ * figure, the title row, then the embedded Tasks section -- wrapping back to the header
  * (Left2 = forward, Left1 = the exact reverse). Right2 acts on whatever is
  * focused, same as always; Right1 no longer means "leave" anywhere on this
  * screen -- there is nowhere left to leave *to*, this screen already is Home
@@ -87,15 +95,24 @@
  *     when there is genuinely nothing today (see todaysEvents()'s own
  *     comment) -- an empty strip has nothing to land on, same reasoning the
  *     old mood-label stop used to skip itself when hidden.
+ *   - Alert area (only while alerts are pending; it replaces the Header and
+ *     Glance stops with a single stop of its own, inverted when focused).
+ *     Right2 dismisses the alert on top, revealing the next-newest (dismissal
+ *     is soft -- the Alerts screen still lists it); Right1 opens the Alerts
+ *     screen. Header actions
+ *     (Settings, Sync All) are out of reach until the last alert is dismissed.
  *   - Companion figure: the bubble itself inverts (black background, white
- *     text) rather than a selection-box outline around the figure -- the
- *     bubble is the thing being acted on here, so the highlight belongs on
- *     it directly. Right2 is Dismiss when an alert is currently showing
- *     (steps to the next-newest one not yet dismissed, see
- *     CompanionAlertBubble), and does nothing when the bubble is showing its
- *     idle line instead -- there's nothing to dismiss then. Right1 opens the
- *     Alerts screen (only a real destination in builds with
- *     ENABLE_BLE_NOTIFY_SPIKE defined; a no-op otherwise).
+ *     text) rather than a selection-box outline around the figure. Right2
+ *     does nothing -- the bubble only holds the companion's own remarks.
+ *     Right1 opens the Alerts screen (only a real destination in builds with
+ *     ENABLE_BLE_NOTIFY_SPIKE defined; a no-op otherwise). Not a stop at all
+ *     while the companion is hidden.
+ *   - Title row (the Todoist projects, then Logs): while focused the selected
+ *     entry sits in the same rounded black pill a selected tab does; unfocused
+ *     it is just bold. Right1/Right2 step to the previous/next entry,
+ *     wrapping, and are labelled with where they would land; the selected
+ *     entry is drawn bold. Selecting one reloads the section below it on its
+ *     first tab.
  *   - Embedded section: the tab bar
  *     itself (see tabBarFocused's own comment) is always the first stop --
  *     "the start of the section" -- reachable regardless of whether the
@@ -115,15 +132,11 @@
  * Side Up/Down are overridden on this screen only: everywhere else in the
  * app they jump to the previous/next app in the home grid's own order (see
  * OrganizerScreenActivity/SettingsActivity's own identical block), but here
- * they are labelled F1/F2 and choose which Todoist filter the section below
- * the companion shows (switchFilter()), from whichever focus stop the cursor is on --
- * independent of Left1/Left2/Right1/Right2 above. This is the one screen
- * from which the app-jump shortcut is not reachable at all. The section
- * below the companion never starts above the bottom of the longest of
- * those two labels' boxes plus a little spacing (SECTION_SIDE_BUTTON_GAP),
- * so the labels never sit beside its tab bar or rows; it sits lower than
- * that whenever the companion above it (calendar events, a longer bubble)
- * takes more room.
+ * they step the title row to the previous/next project (stepProject()), from
+ * whichever focus stop the cursor is on -- independent of
+ * Left1/Left2/Right1/Right2 above. They carry no on-screen labels here, so the
+ * section below the companion uses the full width of the screen. This is the one
+ * screen from which the app-jump shortcut is not reachable at all.
  */
 class QuickPickActivity final : public Activity {
  public:
@@ -158,10 +171,32 @@ class QuickPickActivity final : public Activity {
   int& embeddedRow() { return taskSelectedRow; }
   int embeddedRow() const { return taskSelectedRow; }
 
-  // Shows the tasks of Todoist filter `filterIndex` (0 = Filter 1, 1 = Filter 2;
-  // the side Up/Down buttons). Lands on the tab bar, whichever focus stop the
-  // cursor was on. No-op if that filter is already showing.
-  void switchFilter(uint8_t filterIndex);
+  // One entry of the title row: a Todoist project that has tasks under the
+  // Filter, or Logs (today's completions, shown like one more project but with
+  // no tab bar). `scope` is what taskTabModel scopes the tasks by.
+  struct ProjectEntry {
+    uint32_t scope = 0;
+    std::string name;
+    bool isLogs = false;
+  };
+  // Rebuilds projectEntries from the cache -- the projects that have tasks, a
+  // generic "Tasks" group for tasks whose project is unknown (or when none has
+  // a name yet), and Logs last -- keeping the same entry selected where it
+  // survives. Called on entry and after any change to the task list.
+  void rebuildProjectEntries();
+  // The taskTabModel scope of the selected entry.
+  uint32_t currentScope() const;
+  bool onLogsEntry() const;
+  // Selects entry `index`: first tab, first row, tab bar focused (or, on Logs,
+  // no tab bar to focus).
+  void selectProject(size_t index);
+  // Previous (-1) / next (+1) entry, wrapping at both ends -- Right1/Right2 on
+  // the title row and the side Up/Down buttons. Focus stays on the title row if
+  // it was there, and otherwise lands at the start of the section below it.
+  void stepProject(int delta);
+  // Moves focus to the start of the Tasks section: its tab bar, or on Logs its
+  // first row (the title row itself when there are none).
+  void focusEmbeddedFirst();
 
   // Moves the embedded section to the previous (delta -1) or next (delta +1)
   // visible tab, wrapping at both ends. Right2 on the tab bar. No-op with
@@ -203,9 +238,26 @@ class QuickPickActivity final : public Activity {
   // genuinely nothing today; a fallback row only ever covers "not synced
   // yet" (see todaysEvents()'s own comment).
   std::vector<GlanceEventRow> todaysEvents() const;
-  // glanceNewestAlert() is unused: the newest alert is the bubble's job now
-  // (see this file's own header comment) -- kept rather than deleted.
-  std::string glanceNewestAlert() const;
+  // Pending BLE alerts, newest first -- what the alert area shows in place of
+  // the header and glance strip (see this file's own header comment). Always 0
+  // in builds without ENABLE_BLE_NOTIFY_SPIKE.
+  static size_t pendingAlertCount();
+  // Writes pending alert k's (0 = newest) "title: content" line into out; false if k is out of range.
+  static bool pendingAlertLine(size_t k, char* out, size_t outSize);
+  // Keeps focus on a stop that exists right now: the alert area takes over
+  // the Header and Glance stops while alerts are pending and gives them back
+  // once the last one is dismissed, and the Companion stop is gone while the
+  // companion is hidden.
+  void reconcileFocus();
+  // Whether the companion figure and its bubble are drawn (Settings -> Companion).
+  static bool companionVisible();
+  // Focus-loop moves in and out of the top block (the alert area, or else the
+  // header and glance strip) -- shared by Left1/Left2 so the two directions
+  // cannot disagree about which stops exist.
+  void focusTopBlockFirst();
+  void focusTopBlockLast();
+  void focusAfterTopBlock();
+  void focusEmbeddedLast();
 
   // Row cursor into the embedded Tasks section's active tab -- a row index
   // into whichever list backs activeKind (the live task cache for the five
@@ -213,12 +265,18 @@ class QuickPickActivity final : public Activity {
   // cache index itself. Reset by rebuildEmbeddedTabs() whenever the tab set
   // changes.
   int taskSelectedRow = 0;
-  // Which of this screen's four stops has focus (see this file's own header
+  // The title row's entries and which one is selected (see ProjectEntry).
+  std::vector<ProjectEntry> projectEntries;
+  size_t projectIndex = 0;
+  // Which of this screen's stops has focus (see this file's own header
   // comment for the full loop order). Header, Glance and Companion are
   // single stops with no cursor of their own -- only the embedded section
   // needs its row cursor and tabBarFocused.
-  enum class Focus { Embedded, Header, Glance, Companion };
+  enum class Focus { Embedded, Header, Glance, Alerts, Companion, Projects };
   Focus focus = Focus::Companion;
+  // Pending alerts the last loop() saw, so one arriving (or being dismissed
+  // elsewhere) repaints the screen.
+  size_t lastAlertCount = 0;
 
   // Tabs currently visible in the embedded section, and which one is active
   // -- same shape as TasksActivity's own visibleTabs/currentKind(), kept in

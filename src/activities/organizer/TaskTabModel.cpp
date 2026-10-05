@@ -3,28 +3,29 @@
 #include <I18n.h>
 #include <TodoistTaskCache.h>
 
-#include "CrossPointState.h"
-
 namespace taskTabModel {
 
-uint8_t activeFilterBit() {
-  return APP_STATE.todoistActiveFilter == 0 ? TodoistTask::FILTER_1_BIT : TodoistTask::FILTER_2_BIT;
+namespace {
+bool inProjectScope(const TodoistTask& task, const uint32_t projectScope) {
+  if (projectScope == ALL_PROJECTS) return true;
+  if (projectScope != UNKNOWN_PROJECT) return task.projectHash == projectScope;
+  // The unmatched group: no project id at all, or one that is not in the cached
+  // project list.
+  if (task.projectHash == 0) return true;
+  for (const auto& project : TODOIST_TASKS.getProjects()) {
+    if (project.hash == task.projectHash) return false;
+  }
+  return true;
 }
+}  // namespace
 
-void setActiveFilter(const uint8_t filterIndex) {
-  const uint8_t clamped = filterIndex == 0 ? 0 : 1;
-  if (APP_STATE.todoistActiveFilter == clamped) return;
-  APP_STATE.todoistActiveFilter = clamped;
-  APP_STATE.saveToFile();
-}
-
-bool matchesKind(const TaskTabKind kind, const size_t cacheIndex) {
+bool matchesKind(const TaskTabKind kind, const size_t cacheIndex, const uint32_t projectScope) {
   if (kind == TaskTabKind::LOGS) return false;
 
   const auto& tasks = TODOIST_TASKS.getTasks();
   if (cacheIndex >= tasks.size()) return false;
   const TodoistTask& task = tasks[cacheIndex];
-  if ((task.filterMask & activeFilterBit()) == 0) return false;
+  if (!inProjectScope(task, projectScope)) return false;
 
   // Today, as the last sync settled it. DUE_NONE when nothing has synced or
   // the date could not be established, which is why the three dated kinds
@@ -56,29 +57,31 @@ bool matchesKind(const TaskTabKind kind, const size_t cacheIndex) {
   return false;
 }
 
-int countFor(const TaskTabKind kind) {
-  if (kind == TaskTabKind::LOGS) {
-    int logCount = 0;
-    for (const auto& entry : TODOIST_TASKS.getCompletedTodayEntries()) {
-      if ((entry.filterMask & activeFilterBit()) != 0) logCount++;
-    }
-    return logCount;
-  }
-
-  const auto& tasks = TODOIST_TASKS.getTasks();
+int countInProject(const uint32_t projectScope) {
   int count = 0;
-  for (size_t i = 0; i < tasks.size(); i++) {
-    if (matchesKind(kind, i)) count++;
+  for (const auto& task : TODOIST_TASKS.getTasks()) {
+    if (inProjectScope(task, projectScope)) count++;
   }
   return count;
 }
 
-int taskCacheIndexForRow(const TaskTabKind kind, const int row) {
+int countFor(const TaskTabKind kind, const uint32_t projectScope) {
+  if (kind == TaskTabKind::LOGS) return static_cast<int>(TODOIST_TASKS.getCompletedTodayEntries().size());
+
+  const auto& tasks = TODOIST_TASKS.getTasks();
+  int count = 0;
+  for (size_t i = 0; i < tasks.size(); i++) {
+    if (matchesKind(kind, i, projectScope)) count++;
+  }
+  return count;
+}
+
+int taskCacheIndexForRow(const TaskTabKind kind, const int row, const uint32_t projectScope) {
   if (row < 0 || kind == TaskTabKind::LOGS) return -1;
   const auto& tasks = TODOIST_TASKS.getTasks();
   int seen = 0;
   for (size_t i = 0; i < tasks.size(); i++) {
-    if (!matchesKind(kind, i)) continue;
+    if (!matchesKind(kind, i, projectScope)) continue;
     if (seen == row) return static_cast<int>(i);
     seen++;
   }
@@ -86,40 +89,35 @@ int taskCacheIndexForRow(const TaskTabKind kind, const int row) {
 }
 
 int logEntryIndexForRow(const int row) {
-  if (row < 0) return -1;
-  // The row-th entry the active filter shows, as an index into the whole log.
-  const auto& entries = TODOIST_TASKS.getCompletedTodayEntries();
-  int seen = 0;
-  for (size_t i = 0; i < entries.size(); i++) {
-    if ((entries[i].filterMask & activeFilterBit()) == 0) continue;
-    if (seen == row) return static_cast<int>(i);
-    seen++;
-  }
-  return -1;
+  if (row < 0 || static_cast<size_t>(row) >= TODOIST_TASKS.getCompletedTodayEntries().size()) return -1;
+  return row;
 }
 
 bool rowsHaveSubtitle(const TaskTabKind kind) { return kind == TaskTabKind::UPCOMING || kind == TaskTabKind::LOGS; }
 
-int rebuildVisibleTabs(const TaskTabKind wanted, std::vector<TaskTabKind>& visibleTabs) {
+int rebuildVisibleTabs(const TaskTabKind wanted, std::vector<TaskTabKind>& visibleTabs, const uint32_t projectScope,
+                       const bool includeLogs) {
   visibleTabs.clear();
   visibleTabs.reserve(5);
   // Each of these earns its place by having rows, so an inbox with nothing
   // overdue carries no dead Overdue tab.
   for (const TaskTabKind kind :
        {TaskTabKind::OVERDUE, TaskTabKind::TODAY, TaskTabKind::UPCOMING, TaskTabKind::NO_DATE}) {
-    if (countFor(kind) > 0) visibleTabs.push_back(kind);
+    if (countFor(kind, projectScope) > 0) visibleTabs.push_back(kind);
   }
-  // Logs always shows -- it's a log view, not a filter, so an empty state
-  // ("nothing completed today yet") is itself useful feedback rather than
-  // noise to hide. It's also what keeps this list from ever being empty.
-  visibleTabs.push_back(TaskTabKind::LOGS);
+  // Logs always shows when asked for -- it's a log view, not a filter, so an
+  // empty state ("nothing completed today yet") is itself useful feedback
+  // rather than noise to hide. It's also what keeps this list from ever being
+  // empty.
+  if (includeLogs) visibleTabs.push_back(TaskTabKind::LOGS);
 
   for (size_t i = 0; i < visibleTabs.size(); i++) {
     if (visibleTabs[i] == wanted) return static_cast<int>(i);
   }
   // Falls back to the first visible tab when the selected kind just emptied
   // - completing the last overdue task, say, which takes its tab away while
-  // the user is standing on it.
+  // the user is standing on it. (An empty list, possible only without Logs,
+  // leaves 0 pointing at nothing -- the caller owns that case.)
   return 0;
 }
 

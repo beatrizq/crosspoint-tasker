@@ -54,6 +54,7 @@ void TodoistTasksParser::reset() {
   tasksSeen = 0;
   currentId[0] = '\0';
   currentContent[0] = '\0';
+  currentProjectId[0] = '\0';
   currentDue[0] = '\0';
   currentIsRecurring = false;
   currentLabels[0] = '\0';
@@ -66,10 +67,11 @@ void TodoistTasksParser::feed(const char* data, const size_t len) { parser.feed(
 void TodoistTasksParser::commitTask() {
   if (currentId[0] != '\0' && currentContent[0] != '\0') {
     tasksSeen++;
-    if (sink) sink(sinkCtx, currentId, currentContent, currentDue, currentIsRecurring, currentLabels);
+    if (sink) sink(sinkCtx, currentId, currentContent, currentDue, currentIsRecurring, currentLabels, currentProjectId);
   }
   currentId[0] = '\0';
   currentContent[0] = '\0';
+  currentProjectId[0] = '\0';
   currentDue[0] = '\0';
   currentIsRecurring = false;
   currentLabels[0] = '\0';
@@ -100,6 +102,8 @@ void TodoistTasksParser::sOnKey(void* ctx, const char* key, const size_t len) {
           self->lastKey = LastKey::TASK_DUE;
         else if (keyIs(key, len, "labels", 6))
           self->lastKey = LastKey::TASK_LABELS;
+        else if (keyIs(key, len, "project_id", 10))
+          self->lastKey = LastKey::TASK_PROJECT_ID;
         else
           self->lastKey = LastKey::NONE;
       } else if (self->dueDepth != 0 && self->taskDepth == self->dueDepth && keyIs(key, len, "date", 4)) {
@@ -135,6 +139,9 @@ void TodoistTasksParser::sOnString(void* ctx, const char* value, const size_t le
         break;
       case LastKey::TASK_CONTENT:
         if (self->taskDepth == 1) safeCopy(self->currentContent, sizeof(self->currentContent), value, len);
+        break;
+      case LastKey::TASK_PROJECT_ID:
+        if (self->taskDepth == 1) safeCopy(self->currentProjectId, sizeof(self->currentProjectId), value, len);
         break;
       case LastKey::DUE_DATE:
         safeCopy(self->currentDue, sizeof(self->currentDue), value, len);
@@ -174,6 +181,7 @@ void TodoistTasksParser::sOnObjectStart(void* ctx) {
       self->labelsDepth = 0;
       self->currentId[0] = '\0';
       self->currentContent[0] = '\0';
+      self->currentProjectId[0] = '\0';
       self->currentDue[0] = '\0';
       self->currentLabels[0] = '\0';
       self->currentLabelsLen = 0;

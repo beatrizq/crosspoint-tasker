@@ -70,6 +70,8 @@ void BleNotificationQueue::push(const uint32_t id, const bool isCall, const char
     }
   }
 
+  // The slot being reused no longer holds what was dismissed there.
+  dismissedMask = static_cast<uint8_t>(dismissedMask & ~(1u << pos));
   BleNotificationEntry& e = entries[pos];
   e.id = id;
   e.isCall = isCall;
@@ -85,8 +87,40 @@ void BleNotificationQueue::push(const uint32_t id, const bool isCall, const char
 }
 
 const BleNotificationEntry& BleNotificationQueue::getEntry(const size_t indexFromNewest) const {
-  const uint8_t slot = static_cast<uint8_t>((pos + CAPACITY - 1 - indexFromNewest) % CAPACITY);
-  return entries[slot];
+  return entries[slotFromNewest(indexFromNewest)];
+}
+
+size_t BleNotificationQueue::getPendingCount() const {
+  size_t count = 0;
+  for (size_t i = 0; i < unreadCount; i++) {
+    if ((dismissedMask & (1u << slotFromNewest(i))) == 0) count++;
+  }
+  return count;
+}
+
+const BleNotificationEntry* BleNotificationQueue::getPendingEntry(const size_t k) const {
+  size_t seen = 0;
+  for (size_t i = 0; i < unreadCount; i++) {
+    const uint8_t slot = slotFromNewest(i);
+    if ((dismissedMask & (1u << slot)) != 0) continue;
+    if (seen == k) return &entries[slot];
+    seen++;
+  }
+  return nullptr;
+}
+
+void BleNotificationQueue::dismissPending(const size_t k) {
+  size_t seen = 0;
+  for (size_t i = 0; i < unreadCount; i++) {
+    const uint8_t slot = slotFromNewest(i);
+    if ((dismissedMask & (1u << slot)) != 0) continue;
+    if (seen == k) {
+      dismissedMask = static_cast<uint8_t>(dismissedMask | (1u << slot));
+      saveToFile();
+      return;
+    }
+    seen++;
+  }
 }
 
 void BleNotificationQueue::toJson(JsonDocument& doc) const {
@@ -104,6 +138,7 @@ void BleNotificationQueue::toJson(JsonDocument& doc) const {
   doc["pos"] = pos;
   doc["fill"] = fill;
   doc["unreadCount"] = unreadCount;
+  doc["dismissedMask"] = dismissedMask;
 }
 
 bool BleNotificationQueue::fromJson(JsonVariantConst doc) {
@@ -128,6 +163,7 @@ bool BleNotificationQueue::fromJson(JsonVariantConst doc) {
   fill = static_cast<uint8_t>(std::min(static_cast<int>(fill), static_cast<int>(actualCount)));
   unreadCount = doc["unreadCount"] | static_cast<uint8_t>(0);
   unreadCount = std::min(unreadCount, fill);
+  dismissedMask = doc["dismissedMask"] | static_cast<uint8_t>(0);
   return true;
 }
 

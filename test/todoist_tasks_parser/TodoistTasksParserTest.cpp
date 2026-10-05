@@ -57,11 +57,12 @@ struct ParsedTask {
   std::string due;
   bool isRecurring;
   std::string labels;
+  std::string projectId;
 };
 
 void collect(void* ctx, const char* id, const char* content, const char* due, const bool isRecurring,
-             const char* labels) {
-  static_cast<std::vector<ParsedTask>*>(ctx)->push_back({id, content, due, isRecurring, labels});
+             const char* labels, const char* projectId) {
+  static_cast<std::vector<ParsedTask>*>(ctx)->push_back({id, content, due, isRecurring, labels, projectId});
 }
 
 std::vector<ParsedTask> parseInChunks(const char* body, size_t chunkSize) {
@@ -84,6 +85,21 @@ TEST(TodoistTasksParser, ExtractsIdContentAndDueDate) {
   EXPECT_EQ(tasks[0].content, "terminar fixes cup pong para release");
   EXPECT_EQ(tasks[0].due, "2026-08-17");
   EXPECT_EQ(tasks[1].due, "2026-08-11");
+}
+
+TEST(TodoistTasksParser, ExtractsProjectId) {
+  const auto tasks = parseInChunks(kRealisticResponse, 4096);
+
+  ASSERT_EQ(tasks.size(), 4u);
+  EXPECT_EQ(tasks[0].projectId, "220474322");
+  EXPECT_EQ(tasks[1].projectId, "");  // no project_id key at all
+}
+
+TEST(TodoistTasksParser, ProjectIdSurvivesTinyChunks) {
+  const auto tasks = parseInChunks(kRealisticResponse, 1);
+
+  ASSERT_EQ(tasks.size(), 4u);
+  EXPECT_EQ(tasks[0].projectId, "220474322");
 }
 
 // The task object's own "deadline" carries a "date" key too; only due.date may

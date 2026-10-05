@@ -12,17 +12,17 @@
  * integrations (Todoist, Google Calendar), even though there is nothing to
  * sync here -- everything it controls is local, not an account to connect.
  *
- * There is no enable/disable toggle -- the companion's own screen is Home
- * (see ActivityManager::goHome()), so it is always active.
+ * The screen itself is Home (see ActivityManager::goHome()), so it is always
+ * there; "Show companion" only hides the figure and its speech bubble on it.
  */
 class CompanionSettingsActivity final : public Activity {
  public:
   explicit CompanionSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : Activity("CompanionSettings", renderer, mappedInput) {}
 
-  // Nickname, Sleep start, Sleep end, Amazed at, Happy at, Satisfied at,
-  // Neglected after, Reset.
-  static constexpr int MENU_ITEMS = 8;
+  // Show companion, Nickname, Sleep start, Sleep end, Amazed at, Happy at,
+  // Satisfied at, Neglected after, Reset.
+  static constexpr int MENU_ITEMS = 9;
 
   void onEnter() override;
   void onExit() override;

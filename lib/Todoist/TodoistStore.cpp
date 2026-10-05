@@ -2,7 +2,6 @@
 
 #include <Logging.h>
 #include <ObfuscationUtils.h>
-#include <Utf8.h>
 
 #include <cstring>
 
@@ -11,9 +10,6 @@ void TodoistStore::toJson(JsonDocument& doc) const {
   // In the clear: a filter query is not a secret, and it is the one setting worth
   // being able to fix from a PC without retyping it on a touch keyboard.
   doc["filter"] = filter;
-  doc["filter2"] = filter2;
-  doc["filterName"] = filterName;
-  doc["filterName2"] = filterName2;
 }
 
 bool TodoistStore::fromJson(JsonVariantConst doc) {
@@ -24,11 +20,6 @@ bool TodoistStore::fromJson(JsonVariantConst doc) {
   filter = doc["filter"] | DEFAULT_FILTER;
   if (filter.empty()) filter = DEFAULT_FILTER;
   if (filter.size() > MAX_FILTER_LEN) filter.resize(MAX_FILTER_LEN);
-  filter2 = doc["filter2"] | DEFAULT_FILTER;
-  if (filter2.empty()) filter2 = DEFAULT_FILTER;
-  if (filter2.size() > MAX_FILTER_LEN) filter2.resize(MAX_FILTER_LEN);
-  setFilterName(0, doc["filterName"] | "");
-  setFilterName(1, doc["filterName2"] | "");
 
   const char* obfuscated = doc["token_obf"] | "";
   if (obfuscated[0] != '\0') {
@@ -68,27 +59,4 @@ void TodoistStore::setFilter(const std::string& value) {
     return;
   }
   filter = value.size() > MAX_FILTER_LEN ? value.substr(0, MAX_FILTER_LEN) : value;
-}
-
-void TodoistStore::setFilter2(const std::string& value) {
-  // Same rule as setFilter(): an empty query would only ever look like a broken
-  // sync, so clearing it falls back to the default.
-  if (value.empty()) {
-    filter2 = DEFAULT_FILTER;
-    return;
-  }
-  filter2 = value.size() > MAX_FILTER_LEN ? value.substr(0, MAX_FILTER_LEN) : value;
-}
-
-void TodoistStore::setFilterName(const uint8_t index, const std::string& value) {
-  // Keep the first MAX_FILTER_NAME_CHARS characters (not bytes, so a multi-byte
-  // character is never cut in half).
-  const auto* begin = reinterpret_cast<const unsigned char*>(value.c_str());
-  const auto* p = begin;
-  size_t chars = 0;
-  while (*p != '\0' && chars < MAX_FILTER_NAME_CHARS) {
-    utf8NextCodepoint(&p);
-    chars++;
-  }
-  (index == 0 ? filterName : filterName2).assign(value, 0, static_cast<size_t>(p - begin));
 }

@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "TodoistCompletedCountParser.h"
+#include "TodoistProject.h"
 #include "TodoistTask.h"
 
 namespace freeink {
@@ -16,6 +17,7 @@ class SecureHttpClient;
  *
  * Endpoints used:
  *   GET  /tasks/filter?query=<user filter>              - the Tasks screen's list
+ *   GET  /projects                                      - project names, for the Companion's title row
  *   POST /tasks/{id}/close                              - mark a task complete
  *   POST /tasks/{id}                                    - reschedule (due_date only)
  *   GET  /tasks/completed/by_completion_date?filter_query=<user filter>
@@ -46,7 +48,7 @@ class TodoistClient {
   };
 
   /**
-   * Fetch whatever `filter` (one of the two Filter settings) matches, in one
+   * Fetch whatever `filter` (the Filter setting) matches, in one
    * filter query. The Tasks
    * screen splits the result into Overdue, Today, Upcoming and No date against
    * the date it settles on; it does not narrow it further.
@@ -73,6 +75,17 @@ class TodoistClient {
    */
   static Error fetchTasks(freeink::SecureHttpClient& http, const std::string& filter,
                           std::vector<TodoistTask>& outTasks, std::string& outServerDate);
+
+  /**
+   * Fetch the user's projects (id hash + name), in the order they appear in the
+   * Todoist app (child_order), capped at TODOIST_MAX_PROJECTS. Tasks carry only a
+   * project id, so this is what turns TodoistTask::projectHash into a name.
+   * Only the first page is read: 50 projects is far more than the Companion can
+   * show. Output is cleared first and left empty on any error.
+   *
+   * `http`: caller-owned connection -- see fetchTasks()'s own parameter doc.
+   */
+  static Error fetchProjects(freeink::SecureHttpClient& http, std::vector<TodoistProject>& outProjects);
 
   /**
    * Complete a task. A 404 is reported as OK: the task is already gone from the

@@ -35,10 +35,6 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // wall clock at boot rather than via a lastSleepFromX flag like the quick-pick
   // fields above: a stale flag from a session that already finished needs telling
   // apart from a live one, and the end time itself already does that.
-  // Which Todoist filter the Companion's lists show: 0 = Filter 1, 1 = Filter 2
-  // (the two side buttons). Persisted so a reboot keeps the view.
-  uint8_t todoistActiveFilter = 0;
-
   bool focusSessionActive = false;
   std::string focusSessionText;
   std::string focusSessionItemId;

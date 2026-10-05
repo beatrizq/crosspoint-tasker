@@ -329,6 +329,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Index into companion::COMPANION_SPRITES (0 = the first companion).
   // Persisted numerically, so sprites/order.txt is append-only.
   uint8_t companionId = 0;
+  // Whether the Companion screen draws the companion figure and its speech
+  // bubble. Off hands that space to the Tasks section below it and drops the
+  // figure from the focus loop; the alerts and calendar rows above are unaffected.
+  uint8_t showCompanion = 1;
   // Sleep window the companion shows the Sleeping mood during, local wall-clock
   // time. Default 22:00-07:00. May wrap past midnight (start > end); start ==
   // end means the window never applies (24 awake hours, not 24 asleep).

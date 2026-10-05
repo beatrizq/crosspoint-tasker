@@ -37,13 +37,12 @@ constexpr int NTP_POLL_ATTEMPTS = 50;
 // ISO dates order correctly as plain strings, and "" loses to any real date.
 const std::string& laterDate(const std::string& a, const std::string& b) { return b > a ? b : a; }
 
-// TodoistCompletedCountParser::ItemSink for the completed-tasks fetches below:
-// collects each item (tagged with the filter it came from) as the response
-// streams in, capped per filter the same way the cache caps its own entries so
-// a busy day never grows this past what setCompletedToday would keep anyway.
+// TodoistCompletedCountParser::ItemSink for the completed-tasks fetch below:
+// collects each item as the response streams in, capped the same way the cache
+// caps its own entries so a busy day never grows this past what
+// setCompletedToday would keep anyway.
 struct CompletedCollector {
   std::vector<TodoistCompletedLogEntry>* out;
-  uint8_t filterMask;
 };
 
 void collectCompletedItem(void* ctx, const char* id, const char* content) {
@@ -53,7 +52,6 @@ void collectCompletedItem(void* ctx, const char* id, const char* content) {
   entry.title = content;
   entry.taskId = id;
   entry.pending = false;
-  entry.filterMask = collector->filterMask;
   collector->out->push_back(std::move(entry));
 }
 
@@ -195,19 +193,6 @@ const char* runTasks() {
     }
   }
 
-  // Both filters: a task either one matches is one row, and one both match
-  // carries both bits (TodoistTask::filterMask). The second fetch is skipped when
-  // both filters are the same query. Each filter's fetch is committed to the
-  // cache the moment it arrives -- via setTasksForFilter(), which only ever
-  // touches that filter's own slice of the list -- rather than merging both
-  // fetches together first and replacing the whole cache once: that held the
-  // old cache, both fetches and the merge result all at once (the peak that
-  // starved the next TLS request of heap), *and* meant a failure fetching the
-  // second filter discarded the first filter's already-fetched data along with
-  // it, wiping every tab under whichever filter's fetch failed even though its
-  // own request had nothing wrong with it.
-  const bool sameFilter = TODOIST_STORE.filtersMatch();
-  const uint8_t bothFiltersBit = TodoistTask::FILTER_1_BIT | TodoistTask::FILTER_2_BIT;
   std::vector<TodoistTask> fetched;
   std::string serverDate;
   if (error == TodoistClient::OK) {
@@ -228,65 +213,54 @@ const char* runTasks() {
 
   if (error == TodoistClient::OK) {
     RenderLock lock;
-    TODOIST_TASKS.setTasksForFilter(std::move(fetched), sameFilter ? bothFiltersBit : TodoistTask::FILTER_1_BIT, today);
+    TODOIST_TASKS.setTasks(std::move(fetched), today);
   }
-  if (error == TodoistClient::OK && !sameFilter) {
-    std::vector<TodoistTask> fetched2;
-    std::string ignoredDate;
+
+  // The project names behind the tasks' project ids, for the Companion's title
+  // row. Best-effort, like the completed-tasks fetch below: the task list above
+  // is this sync's real job, so a failure here only leaves the previous names in
+  // place (tasks from a new project then group under a generic title until the
+  // next sync that gets through).
+  if (error == TodoistClient::OK) {
+    std::vector<TodoistProject> projects;
     resetTaskWatchdogIfSubscribed();
-    error = TodoistClient::fetchTasks(http, TODOIST_STORE.getFilter2(), fetched2, ignoredDate);
+    const TodoistClient::Error projectError = TodoistClient::fetchProjects(http, projects);
     resetTaskWatchdogIfSubscribed();
-    if (error == TodoistClient::OK) {
+    if (projectError == TodoistClient::OK) {
       RenderLock lock;
-      TODOIST_TASKS.setTasksForFilter(std::move(fetched2), TodoistTask::FILTER_2_BIT, "");
+      TODOIST_TASKS.setProjects(std::move(projects));
+    } else {
+      LOG_ERR("OSYNC", "Projects fetch failed: %s", TodoistClient::errorString(projectError));
     }
   }
 
   // A completed task never shows up in the open-task fetch above, so a task
   // finished in the Todoist app - not on this device - would otherwise never
-  // be counted. This asks Todoist directly for today's completions matching
-  // each Filter setting, so app-side completions credit the companion (the count
-  // is what either filter matched) and the Logs tab can show the active filter's
-  // alone (TodoistCompletedLogEntry::filterMask). Best-effort: the open-task
-  // list above is this sync's real job, so a failure here does not fail the sync
-  // itself - it just leaves today's completed count and the companion's credit
-  // stale until the next attempt. Committed per filter, like the tasks above, so
-  // a failure fetching one filter's completions cannot erase the other's.
+  // be counted. This asks Todoist directly for today's completions matching the
+  // Filter setting, so app-side completions credit the companion and show in the
+  // Logs list. Best-effort: the open-task list above is this sync's real job, so
+  // a failure here does not fail the sync itself - it just leaves today's
+  // completed count and the companion's credit stale until the next attempt.
   if (error == TodoistClient::OK && !today.empty()) {
     std::vector<TodoistCompletedLogEntry> completed;
     completed.reserve(TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES);
-    CompletedCollector first{&completed, static_cast<uint8_t>(sameFilter ? bothFiltersBit : TodoistTask::FILTER_1_BIT)};
+    CompletedCollector collector{&completed};
     uint16_t ignoredCount = 0;
     resetTaskWatchdogIfSubscribed();
-    TodoistClient::Error countError = TodoistClient::fetchCompletedCountForDay(
-        http, TODOIST_STORE.getFilter(), today, ignoredCount, collectCompletedItem, &first);
+    const TodoistClient::Error countError = TodoistClient::fetchCompletedCountForDay(
+        http, TODOIST_STORE.getFilter(), today, ignoredCount, collectCompletedItem, &collector);
     resetTaskWatchdogIfSubscribed();
-    bool committed = false;
     if (countError == TodoistClient::OK) {
-      RenderLock lock;
-      TODOIST_TASKS.setCompletedForFilter(std::move(completed), sameFilter ? bothFiltersBit : TodoistTask::FILTER_1_BIT,
-                                          today);
-      committed = true;
-    }
-    if (countError == TodoistClient::OK && !sameFilter) {
-      std::vector<TodoistCompletedLogEntry> completed2;
-      completed2.reserve(TodoistTaskCache::MAX_COMPLETED_TODAY_TITLES);
-      CompletedCollector second{&completed2, TodoistTask::FILTER_2_BIT};
-      resetTaskWatchdogIfSubscribed();
-      countError = TodoistClient::fetchCompletedCountForDay(http, TODOIST_STORE.getFilter2(), today, ignoredCount,
-                                                            collectCompletedItem, &second);
-      resetTaskWatchdogIfSubscribed();
-      if (countError == TodoistClient::OK) {
+      {
         RenderLock lock;
-        TODOIST_TASKS.setCompletedForFilter(std::move(completed2), TodoistTask::FILTER_2_BIT, "");
+        TODOIST_TASKS.setCompletedToday(std::move(completed), today);
       }
-    }
-    if (countError != TodoistClient::OK) {
+      // Gated on a fetch having landed: a failed one means nothing here actually
+      // changed, so there is nothing new to credit.
+      COMPANION.recordActivity();
+    } else {
       LOG_ERR("OSYNC", "Completed-tasks fetch failed: %s", TodoistClient::errorString(countError));
     }
-    // Gated on a fetch having landed: a failed one means nothing here actually
-    // changed, so there is nothing new to credit.
-    if (committed) COMPANION.recordActivity();
   }
 
   // Persists the fetched list and whatever the queue push managed to clear, so a

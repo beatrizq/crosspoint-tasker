@@ -64,7 +64,21 @@ class BleNotificationQueue : public PersistableStore<BleNotificationQueue> {
   const BleNotificationEntry& getEntry(size_t indexFromNewest) const;
 
   uint8_t getUnreadCount() const { return unreadCount; }
-  void markAllRead() { unreadCount = 0; }
+  void markAllRead() {
+    unreadCount = 0;
+    dismissedMask = 0;
+  }
+
+  // The alerts the home screen's alert area shows: the unread entries (the
+  // newest getUnreadCount() of them) that have not been dismissed from there.
+  // Dismissing is soft -- the entry stays in the queue for the Alerts screen
+  // -- and per entry, so one row can go while the rest stay. k counts from the
+  // newest pending alert (0). pendingEntry() is nullptr when k is out of range.
+  size_t getPendingCount() const;
+  const BleNotificationEntry* getPendingEntry(size_t k) const;
+  // Hides the k-th pending alert from the home screen and persists that, so a
+  // reboot (Sync All reboots) does not bring it back. No-op if k is out of range.
+  void dismissPending(size_t k);
 
   // Dismiss: empties the queue and clears the badge. The entries themselves
   // are left as-is (only the counters reset) -- harmless, since every read
@@ -73,6 +87,7 @@ class BleNotificationQueue : public PersistableStore<BleNotificationQueue> {
     pos = 0;
     fill = 0;
     unreadCount = 0;
+    dismissedMask = 0;
   }
 
  private:
@@ -80,7 +95,16 @@ class BleNotificationQueue : public PersistableStore<BleNotificationQueue> {
   uint8_t pos = 0;          // next write slot
   uint8_t fill = 0;         // valid entries (0..CAPACITY)
   uint8_t unreadCount = 0;  // entries added (or persisted) since the last markAllRead()
+  // One bit per ring slot (not per index from newest, which shifts on every
+  // push): set when that entry was dismissed from the home screen's alert
+  // area. push() clears the bit of the slot it overwrites. Needs CAPACITY <= 8.
+  uint8_t dismissedMask = 0;
+
+  uint8_t slotFromNewest(size_t indexFromNewest) const {
+    return static_cast<uint8_t>((pos + CAPACITY - 1 - indexFromNewest) % CAPACITY);
+  }
 };
+static_assert(BleNotificationQueue::CAPACITY <= 8, "dismissedMask holds one bit per slot");
 
 #define BLE_NOTIFICATIONS BleNotificationQueue::getInstance()
 

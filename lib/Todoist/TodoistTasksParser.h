@@ -11,8 +11,8 @@
  *   {"results":[{"id":"...","content":"...",
  *                "due":{"date":"2026-08-17","is_recurring":false,...},...}],"next_cursor":null}
  *
- * Only id, content, labels, due.date and due.is_recurring are kept; every
- * other field (project, priority, description, duration) is walked past
+ * Only id, content, labels, project_id, due.date and due.is_recurring are kept;
+ * every other field (priority, description, duration) is walked past
  * without being stored. The body is fed in as it arrives off the socket, so a
  * 200-task response never exists in RAM as a whole — only the ~200 bytes of
  * the task being assembled.
@@ -23,8 +23,9 @@ class TodoistTasksParser {
   // task has no due object (possible for tasks pulled in by a filter's
   // secondary clauses); isRecurring is meaningless in that case too. labels is
   // the task's labels joined as "a, b" (truncated), "" when it has none.
+  // projectId is the task's project_id, "" when absent.
   using TaskSink = void (*)(void* ctx, const char* id, const char* content, const char* dueDate, bool isRecurring,
-                            const char* labels);
+                            const char* labels, const char* projectId);
 
   TodoistTasksParser(TaskSink sink, void* sinkCtx);
 
@@ -52,6 +53,7 @@ class TodoistTasksParser {
     TASK_CONTENT,
     TASK_DUE,
     TASK_LABELS,
+    TASK_PROJECT_ID,
     DUE_DATE,
     DUE_IS_RECURRING,
   };
@@ -84,6 +86,7 @@ class TodoistTasksParser {
   // "YYYY-MM-DD" (a datetime is truncated to its date half on copy).
   char currentId[32];
   char currentContent[121];
+  char currentProjectId[32];
   char currentDue[11];
   bool currentIsRecurring;
   // Labels joined with ", " -- 48 characters (TodoistTask::LABELS_MAX_LEN) is

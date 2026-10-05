@@ -3,12 +3,14 @@
 #include <CivilTime.h>
 #include <Logging.h>
 #include <SecureHttpClient.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cstdio>
 #include <utility>
 
 #include "TodoistCompletedCountParser.h"
+#include "TodoistProjectsParser.h"
 #include "TodoistStore.h"
 #include "TodoistTasksParser.h"
 
@@ -24,6 +26,9 @@ constexpr char API_BASE[] = "https://api.todoist.com/api/v1";
 // firmware what the screen was for; the setting moves the decision to the user,
 // and the Tasks tabs now split whatever comes back rather than defining it.
 constexpr char FILTER_URL_BASE[] = "https://api.todoist.com/api/v1/tasks/filter?limit=200&query=";
+
+// The projects endpoint: one page is plenty (see fetchProjects()).
+constexpr char PROJECTS_URL[] = "https://api.todoist.com/api/v1/projects?limit=50";
 
 // The completed-tasks-by-completion-date endpoint. since/until bound the
 // query to one UTC day; filter_query scopes it to the same Filter setting
@@ -100,7 +105,7 @@ struct TaskCollector {
 };
 
 void collectTask(void* ctx, const char* id, const char* content, const char* dueDate, const bool isRecurring,
-                 const char* labels) {
+                 const char* labels, const char* projectId) {
   auto* collector = static_cast<TaskCollector*>(ctx);
   auto& out = *collector->out;
 
@@ -110,6 +115,7 @@ void collectTask(void* ctx, const char* id, const char* content, const char* due
   task.dueDays = todoist::dueDaysFromIso(dueDate);
   task.isRecurring = isRecurring;
   task.labels = labels;
+  task.projectHash = todoist::hashProjectId(projectId);
 
   if (out.size() < TODOIST_MAX_TASKS) {
     out.push_back(std::move(task));
@@ -142,6 +148,31 @@ void collectTask(void* ctx, const char* id, const char* content, const char* due
   const bool worstDated = worst->dueDays != todoist::DUE_NONE;
   const bool preferNew = newDated ? (!worstDated || task.dueDays < worst->dueDays) : false;
   if (preferNew) *worst = std::move(task);
+}
+
+// Sink context for TodoistProjectsParser: collects each project with its
+// child_order so the list can be put in the app's own order afterwards.
+struct ProjectCollector {
+  std::vector<std::pair<int32_t, TodoistProject>>* out;
+};
+
+void collectProject(void* ctx, const char* id, const char* name, const int32_t order) {
+  auto* collector = static_cast<ProjectCollector*>(ctx);
+  if (collector->out->size() >= TODOIST_MAX_PROJECTS) return;
+
+  // Cut at NAME_MAX_LEN characters (not bytes, so a multi-byte character is
+  // never split) -- the title row is one line wide.
+  const auto* begin = reinterpret_cast<const unsigned char*>(name);
+  const auto* p = begin;
+  size_t chars = 0;
+  while (*p != '\0' && chars < TodoistProject::NAME_MAX_LEN) {
+    utf8NextCodepoint(&p);
+    chars++;
+  }
+  TodoistProject project;
+  project.hash = todoist::hashProjectId(id);
+  project.name.assign(name, static_cast<size_t>(p - begin));
+  collector->out->emplace_back(order, std::move(project));
 }
 }  // namespace
 
@@ -208,6 +239,49 @@ TodoistClient::Error TodoistClient::fetchTasks(freeink::SecureHttpClient& http, 
   } else {
     LOG_DBG("TDA", "No usable Date header; today not derivable from the response");
   }
+  return OK;
+}
+
+TodoistClient::Error TodoistClient::fetchProjects(freeink::SecureHttpClient& http,
+                                                  std::vector<TodoistProject>& outProjects) {
+  lastHttpCode = 0;
+  outProjects.clear();
+  if (!TODOIST_STORE.hasToken()) {
+    LOG_DBG("TDA", "No API token configured");
+    return NO_TOKEN;
+  }
+  if (insufficientHeap()) return LOW_MEMORY;
+
+  std::vector<std::pair<int32_t, TodoistProject>> collected;
+  collected.reserve(TODOIST_MAX_PROJECTS);
+  ProjectCollector collector{&collected};
+  TodoistProjectsParser parser(collectProject, &collector);
+
+  if (!http.begin(PROJECTS_URL)) {
+    LOG_ERR("TDA", "Bad projects URL");
+    return NETWORK_ERROR;
+  }
+  applyAuthHeaders(http);
+
+  const int httpCode = http.GET([&parser](const uint8_t* data, const size_t len) {
+    parser.feed(reinterpret_cast<const char*>(data), len);
+    return true;
+  });
+  lastHttpCode = httpCode;
+  LOG_DBG("TDA", "Projects response: %d (%zu projects parsed)", httpCode, parser.projectCount());
+
+  const Error status = errorForStatus(httpCode);
+  if (status != OK) return status;
+  if (parser.hasError()) {
+    LOG_ERR("TDA", "Malformed projects JSON");
+    return PARSE_ERROR;
+  }
+
+  // The app's own order, not the response's: child_order is each project's
+  // position among its siblings. Stable, so equal orders keep the response order.
+  std::stable_sort(collected.begin(), collected.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+  outProjects.reserve(collected.size());
+  for (auto& entry : collected) outProjects.push_back(std::move(entry.second));
   return OK;
 }
 
