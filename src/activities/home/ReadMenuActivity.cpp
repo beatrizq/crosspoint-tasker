@@ -203,7 +203,7 @@ void ReadMenuActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   const Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
-  GUI.drawHeader(renderer, headerRect, tr(STR_MENU_READ), nullptr);
+  GUI.drawHeader(renderer, headerRect, tr(STR_MENU_READER), nullptr);
   // Hovering the header (see headerFocused's own comment): a true pixel
   // invert, the same technique QuickPickActivity's own header focus uses.
   if (headerFocused) {

@@ -95,7 +95,9 @@ void RecentBooksActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right1)) {
-    if (returnToReadMenu) {
+    // With the status bar focused Right1 is always "« Home" (see render()), even
+    // when this screen was opened from the Read menu.
+    if (returnToReadMenu && !headerFocused) {
       activityManager.goToReadMenu();
     } else {
       onGoHome();
@@ -212,7 +214,7 @@ void RecentBooksActivity::render(RenderLock&&) {
 
   // Help text
   const auto labels =
-      mappedInput.mapLabels(returnToReadMenu ? tr(STR_BACK) : tr(STR_HOME),
+      mappedInput.mapLabels(returnToReadMenu && !headerFocused ? tr(STR_BACK) : tr(STR_HOME),
                             headerFocused ? tr(STR_SYNC_ALL) : tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

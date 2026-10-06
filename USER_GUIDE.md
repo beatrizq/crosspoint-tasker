@@ -185,7 +185,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
-  - "Quick resume" - Instead of a static image, the screen you were on stays visible with a moon icon shown on the edge, and the device skips its usual boot screen on wake. If you were reading, it returns straight to the same page. If you were on the Companion screen, it returns there. From anywhere else (Settings, Tasks, Calendar, and so on), the last screen is only what briefly flashes on wake before the device lands on the Companion screen - only the Reader and the Companion screen actually resume to where you were.
+  - "Quick resume" - Instead of a static image, the screen you were on stays visible with a moon icon shown on the edge, and the device skips its usual boot screen on wake. If you were reading, it returns straight to the same page. If you were on the Companion screen, it returns there. From anywhere else (Settings, Tasks, Calendar, and so on), the last screen is only what briefly flashes on wake before the device lands on the main screen (Read and Tasker) - only the Reader and the Companion screen actually resume to where you were.
 
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   

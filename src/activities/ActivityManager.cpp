@@ -19,6 +19,7 @@
 #ifdef ENABLE_BLE_NOTIFY_SPIKE
 #include "network/BleNotificationsActivity.h"
 #endif
+#include "home/MainMenuActivity.h"
 #include "home/QuickPickActivity.h"
 #include "organizer/CalendarActivity.h"
 #include "organizer/SyncAllActivity.h"
@@ -75,7 +76,7 @@ void ActivityManager::renderTaskLoop() {
 
 void ActivityManager::loop() {
   if (currentActivity) {
-    if (!currentActivity->isQuickPickActivity() && mappedInput.wasHomeGesture()) {
+    if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
       if (currentActivity->handleHomeGesture()) {
         return;
       }
@@ -253,15 +254,15 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 }
 
 void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
-  // Home is the companion's own screen now, not the app-tile grid (see
-  // QuickPickActivity's own header comment) -- HomeActivity is left fully
-  // intact but unreachable, so this is the one place that changed rather
-  // than every one of this function's 25+ callers. QuickPickActivity has no
-  // grid to preselect a tile on, so initialMenuItem (still passed by several
-  // callers, e.g. OrganizerScreenActivity's own homeItem()) is simply
-  // ignored now rather than plumbed through -- harmless, not broken.
+  // Home is the two-tile main screen now (see MainMenuActivity's own header
+  // comment), not the old app-tile grid -- HomeActivity is left fully intact but
+  // unreachable, so this is the one place that changed rather than every one of
+  // this function's 25+ callers. The main screen has no grid to preselect a tile
+  // on, so initialMenuItem (still passed by several callers, e.g.
+  // OrganizerScreenActivity's own homeItem()) is simply ignored rather than
+  // plumbed through -- harmless, not broken.
   (void)initialMenuItem;
-  replaceActivity(std::make_unique<QuickPickActivity>(renderer, mappedInput));
+  replaceActivity(std::make_unique<MainMenuActivity>(renderer, mappedInput));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 

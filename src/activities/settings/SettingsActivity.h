@@ -214,7 +214,8 @@ class SettingsActivity final : public Activity {
     if (isSubmenu) {
       tabBuckets = {only};
     } else {
-      tabBuckets = {SettingsBucket::Display, SettingsBucket::Reader, SettingsBucket::System, SettingsBucket::Organizer};
+      // System first: it is the tab Settings opens on.
+      tabBuckets = {SettingsBucket::System, SettingsBucket::Display, SettingsBucket::Reader, SettingsBucket::Organizer};
     }
   }
   void onEnter() override;

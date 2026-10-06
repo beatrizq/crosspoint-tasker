@@ -142,7 +142,12 @@ void dimText(const GfxRenderer& renderer, const int x, const int y, const int fo
 void drawProjectTitleRow(const GfxRenderer& renderer, const int textY, const int pillY, const int pillHeight,
                          const int width, const int sidePadding, const int gap, const std::vector<const char*>& names,
                          const size_t selected, const bool focused) {
-  const int available = width - sidePadding * 2;
+  // The row starts PROJECT_PILL_PADDING left of the content edge, so the first
+  // entry's *text* lines up with the task rows' text below (the pill, when shown,
+  // is what extends into the margin), and ends the same distance in from the
+  // right edge.
+  const int left = sidePadding - PROJECT_PILL_PADDING;
+  const int available = width - left * 2;
   const auto slotWidthOf = [&](const size_t i) {
     return renderer.getTextWidth(UI_12_FONT_ID, names[i],
                                  i == selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR) +
@@ -157,7 +162,7 @@ void drawProjectTitleRow(const GfxRenderer& renderer, const int textY, const int
     first++;
   }
 
-  int x = sidePadding;
+  int x = left;
   for (size_t i = first; i < names.size(); i++) {
     const bool isSelected = i == selected;
     const bool pill = isSelected && focused;
@@ -166,7 +171,7 @@ void drawProjectTitleRow(const GfxRenderer& renderer, const int textY, const int
     // bold text either way, so the regular text is centred in it.
     const auto style = (isSelected && !focused) ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
     const int slotWidth = slotWidthOf(i);
-    if (x + slotWidth > sidePadding + available) {
+    if (x + slotWidth > left + available) {
       if (i == first) {
         // Too wide for the whole row: fill what there is, text truncated to fit.
         const int room = available - 2 * PROJECT_PILL_PADDING;
@@ -713,7 +718,9 @@ void QuickPickActivity::loop() {
     }
     switch (focus) {
       case Focus::Header:
-        activityManager.goToSettings();
+        // Back to the main screen: this screen is no longer Home (see
+        // MainMenuActivity), and Settings is one press from there.
+        activityManager.goHome();
         break;
       case Focus::Glance:
         activityManager.goToCalendar();
@@ -893,10 +900,8 @@ void QuickPickActivity::loop() {
       case Focus::Header:
         // No per-row or per-suggestion action to offer for the header itself
         // (see this file's own header comment) -- Sync All instead. Returns
-        // via goHome() rather than goToCompanion() (this screen is Home now
-        // either way, and goHome() is the one mechanism every other screen's
-        // own Sync All return uses too).
-        activityManager.goToSyncAll([] { activityManager.goHome(); });
+        // here, via goToCompanion(), not to the main screen.
+        activityManager.goToSyncAll([] { activityManager.goToCompanion(); });
         break;
       case Focus::Glance:
         // Nothing to select here -- Right1 (Calendar) is this stop's only
@@ -1344,9 +1349,13 @@ void QuickPickActivity::render(RenderLock&&) {
   // The companion figure (bubble + sprite) is optional (Settings -> Companion ->
   // Show Companion). Hidden, none of it is drawn or measured and the Tasks
   // section below starts right under the top block instead.
-  // Hidden: a LABEL_GAP below the top block, the same break the figure leaves
-  // above the section when it is shown.
-  int figureBottom = topBlockBottom + LABEL_GAP;
+  // Hidden: the title row sits as far below the status row as a real screen's
+  // title does (LyraTheme::drawHeader() puts it at batteryBarHeight + 3 below the
+  // header's top; this row's text sits 4px into the section, and the status row
+  // itself occupies HEADER_CONTENT_HEIGHT), so with nothing between them the two
+  // screens' titles line up. Anything above it -- calendar rows, an alert --
+  // already ends in its own padding, which is the breathing room then.
+  int figureBottom = topBlockBottom + std::max(0, metrics.batteryBarHeight - 1 - HEADER_CONTENT_HEIGHT);
   if (companionVisible()) {
     const auto id = CompanionTracker::activeId();
     const auto mood = COMPANION.currentMood();
@@ -1459,7 +1468,7 @@ void QuickPickActivity::render(RenderLock&&) {
   const char* rightLabel = tr(STR_DIR_DOWN);
   switch (focus) {
     case Focus::Header:
-      backLabel = homeAppOrder::displayName(homeAppOrder::AppId::Settings);
+      backLabel = tr(STR_HOME);
       // Right2 is Sync All instead of Clear/Select -- there's no per-row or
       // per-suggestion action to offer for the header itself.
       confirmLabel = tr(STR_SYNC_ALL);

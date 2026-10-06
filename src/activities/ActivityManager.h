@@ -139,9 +139,8 @@ class ActivityManager {
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE);
-  // Opens the companion screen fresh -- the same screen goHome() itself
-  // opens (see QuickPickActivity's own header comment); this exists as its
-  // own entry point for goToApp()'s AppId::Companion case.
+  // Opens the companion screen (QuickPickActivity, the main screen's "Tasker"
+  // tile) fresh -- also goToApp()'s AppId::Companion case.
   void goToCompanion();
   // Dispatches to whichever of the goTo* methods above opens `id`'s own
   // screen -- the side Left/Right "previous/next app" shortcut every app

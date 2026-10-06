@@ -11,10 +11,10 @@
 #include "activities/organizer/TaskTabModel.h"
 
 /**
- * The companion's own screen -- and, since ActivityManager::goHome() now
- * constructs this instead of HomeActivity, the app's actual Home. Every
- * "Home"/"Apps" button anywhere in the app lands here; the old app-tile grid
- * (HomeActivity) is left fully intact but unreachable. A big pose of the
+ * The companion's own screen -- the main screen's "Tasker" tile
+ * (MainMenuActivity), reached with ActivityManager::goToCompanion(). Home itself
+ * is that main screen now, so this one is a level below it: its status bar's
+ * Right1 goes back there, and so does the home gesture. A big pose of the
  * companion's figure, its mood, and a speech bubble holding only the
  * companion's own remarks -- a plain mood-flavored idle line, or the sleeping
  * line. Never a task suggestion (that's what the embedded Tasks section below
@@ -85,8 +85,9 @@
  *     rather than the companion's outline style when focused -- drawn as an
  *     overlay on top of the theme's own GUI.drawHeader() output (see
  *     render()'s own comment) rather than asking the theme for an inverted
- *     variant, since drawHeader() has no such parameter. Right1 opens
- *     Settings; Right2 is Sync All (activityManager.goToSyncAll()) instead
+ *     variant, since drawHeader() has no such parameter. Right1 goes back to
+ *     the main screen (MainMenuActivity; Settings is one press from there);
+ *     Right2 is Sync All (activityManager.goToSyncAll(), returning here) instead
  *     of Clear/Select, since there's no per-row action to offer here.
  *   - Glance strip: the whole strip is one stop, not one per event -- there
  *     can be several bulleted events, but Right1's own action (open

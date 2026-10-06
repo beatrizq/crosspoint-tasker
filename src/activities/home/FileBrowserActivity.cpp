@@ -312,9 +312,12 @@ void FileBrowserActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right1)) {
-    // Short press: go up one directory, or go home if at root
+    // Short press: go up one directory, or go home if at root -- or, with the
+    // status bar focused, always home (labelled "« Home", see the hints below).
     if (mappedInput.getHeldTime() < GO_HOME_MS) {
-      if (basepath != "/") {
+      if (mode == Mode::Books && headerFocused) {
+        onGoHome();
+      } else if (basepath != "/") {
         const std::string oldPath = basepath;
 
         basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
@@ -479,8 +482,10 @@ void FileBrowserActivity::render(RenderLock&&) {
 
   // Help text
   const bool cancelsToCallerAtRoot = mode == Mode::PickFirmware || mode == Mode::PickImage;
-  const char* backLabel =
-      (basepath == "/") ? ((cancelsToCallerAtRoot || returnToReadMenu) ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
+  const char* backLabel = (mode == Mode::Books && headerFocused) ? tr(STR_HOME)
+                          : (basepath == "/")
+                              ? ((cancelsToCallerAtRoot || returnToReadMenu) ? tr(STR_BACK) : tr(STR_HOME))
+                              : tr(STR_BACK);
   // In PickFirmware/PickImage mode, Confirm on a file returns its path to the caller (not
   // "open"); show STR_SELECT instead. Directories in the same picker still descend, so keep
   // STR_OPEN there.

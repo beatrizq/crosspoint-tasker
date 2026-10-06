@@ -502,10 +502,9 @@ void setup() {
              APP_STATE.readerActivityLoadCount > 0) {
     // Boot to the app menu (Home) if no book is open, last sleep was not from
     // reader, back button is held, or reader activity crashed (indicated by
-    // readerActivityLoadCount > 0). The companion screen is still reached the
-    // same way it always was otherwise -- its own grid tile, or the
-    // lastSleepFromQuickPick resume branch above when that is genuinely what
-    // was open at sleep.
+    // readerActivityLoadCount > 0). The companion screen (the main screen's
+    // "Tasker" tile) is reached from there, or by the lastSleepFromQuickPick
+    // resume branch above when that is genuinely what was open at sleep.
     activityManager.goHome();
   } else {
     // Clear app state to avoid getting into a boot loop if the epub doesn't load

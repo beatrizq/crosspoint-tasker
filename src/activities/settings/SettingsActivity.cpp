@@ -242,7 +242,9 @@ void SettingsActivity::loop() {
       return;
     }
     SETTINGS.saveToFile();
-    if (isSubmenu) {
+    // With the status bar focused Right1 is always "« Home" (see render()), even
+    // inside a submenu.
+    if (isSubmenu && !headerFocused) {
       finish();
     } else {
       onGoHome();
@@ -716,8 +718,8 @@ void SettingsActivity::render(RenderLock&&) {
   // Back on a setting row (it surfaces to the category tab bar), Home once
   // already there or on the header -- see this file's own Right1 handler.
   const bool rowFocused = !headerFocused && selectedSettingIndex > 0;
-  const auto labels = mappedInput.mapLabels(rowFocused || isSubmenu ? tr(STR_BACK) : tr(STR_HOME), confirmLabel,
-                                            tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(!headerFocused && (rowFocused || isSubmenu) ? tr(STR_BACK) : tr(STR_HOME),
+                                            confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen
