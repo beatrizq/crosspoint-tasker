@@ -14,7 +14,7 @@
  * so there is no early-exit gesture to wire up.
  *
  * Reached either fresh (a duration just picked from the Options menu -- see
- * organizerActions::beginFocusSession()) or reconstructed at boot from
+ * plannerActions::beginFocusSession()) or reconstructed at boot from
  * CrossPointState when a session was still running when the device last
  * turned off, so a reboot resumes the lock instead of losing it. Either way
  * the constructor takes the same already-resolved end time; onEnter()

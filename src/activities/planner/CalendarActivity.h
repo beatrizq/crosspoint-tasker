@@ -3,12 +3,12 @@
 
 #include <cstddef>
 
-#include "OrganizerScreenActivity.h"
+#include "PlannerScreenActivity.h"
 
 /**
  * The Calendar screen: the synced Google Calendar window under a single All tab.
  *
- * Calendar was one tab of the Organizer screen and is now its own, and it keeps
+ * Calendar was one tab of the Planner screen and is now its own, and it keeps
  * the one tab so it reads as a sibling of Tasks and Budget rather than as a bare
  * list.
  *
@@ -24,13 +24,13 @@
  * A single tab has nothing to cycle to, so the base class lets a plain Select on
  * the tab bar sync here instead of asking for a hold.
  */
-class CalendarActivity final : public OrganizerScreenActivity {
+class CalendarActivity final : public PlannerScreenActivity {
  public:
   enum class Tab : uint8_t { ALL = 0 };
   static constexpr int TAB_COUNT = 1;
 
   explicit CalendarActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : OrganizerScreenActivity("Calendar", renderer, mappedInput, static_cast<int>(Tab::ALL)) {}
+      : PlannerScreenActivity("Calendar", renderer, mappedInput, static_cast<int>(Tab::ALL)) {}
 
  protected:
   const char* screenTitle() const override;

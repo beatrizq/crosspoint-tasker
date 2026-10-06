@@ -18,8 +18,8 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
-#include "activities/organizer/OrganizerLabels.h"
-#include "activities/organizer/RescheduleTaskActivity.h"
+#include "activities/planner/PlannerLabels.h"
+#include "activities/planner/RescheduleTaskActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "activities/util/OptionsMenuActivity.h"
@@ -29,8 +29,8 @@
 #include "components/icons/bell24.h"
 #include "fontIds.h"
 #include "util/HomeAppOrder.h"
-#include "util/OrganizerActions.h"
-#include "util/OrganizerSync.h"
+#include "util/PlannerActions.h"
+#include "util/PlannerSync.h"
 
 #ifdef ENABLE_BLE_NOTIFY_SPIKE
 #include "network/BleNotificationQueue.h"
@@ -100,7 +100,7 @@ constexpr int ALERT_MAX_LINES = 3;
 // that a deliberate press still feels immediate.
 constexpr unsigned long RIGHT1_ENTRY_GRACE_MS = 500;
 
-// Same dither-overlay technique as OrganizerScreenActivity::dimText() (and
+// Same dither-overlay technique as PlannerScreenActivity::dimText() (and
 // BleNotificationsActivity's own local copy): this e-ink panel has no real
 // greyscale, so "dimmed" text is solid text with a checkerboard of pixels
 // punched back out over it. Call right after drawText() at the same
@@ -121,7 +121,7 @@ void dimText(const GfxRenderer& renderer, const int x, const int y, const int fo
 // Tasks section's own rows, unlike the glance strip's date/time above, which
 // never has a selection to worry about. No-op when !ink: punching white
 // pixels out of already-white-on-black text would just make holes in it, not
-// dim it (same guard OrganizerScreenActivity::dimText() uses).
+// dim it (same guard PlannerScreenActivity::dimText() uses).
 void dimText(const GfxRenderer& renderer, const int x, const int y, const int fontId, const char* text,
              const bool ink) {
   if (!ink) return;
@@ -209,24 +209,24 @@ constexpr int HEADER_HIGHLIGHT_HEIGHT = HEADER_CONTENT_HEIGHT - 6;
 // Row separator between the embedded Tasks section's own rows.
 constexpr int SEPARATOR_HEIGHT = 2;
 
-// Same font selection as OrganizerScreenActivity's own titleFontId()/
+// Same font selection as PlannerScreenActivity's own titleFontId()/
 // subtitleFontId() (Tasks/Calendar) -- not inherited (this
 // class doesn't derive from that base), but kept in lockstep so the embedded
 // section reads exactly like the real Tasks screen it's a scaled-down
 // rendering of.
 int taskRowTitleFontId() {
-  return SETTINGS.organizerFontSize == CrossPointSettings::ORGANIZER_FONT_SMALL ? UI_10_FONT_ID : UI_12_FONT_ID;
+  return SETTINGS.plannerFontSize == CrossPointSettings::PLANNER_FONT_SMALL ? UI_10_FONT_ID : UI_12_FONT_ID;
 }
 
 int taskRowSubtitleFontId() {
-  return SETTINGS.organizerFontSize == CrossPointSettings::ORGANIZER_FONT_SMALL ? SMALL_FONT_ID : UI_10_FONT_ID;
+  return SETTINGS.plannerFontSize == CrossPointSettings::PLANNER_FONT_SMALL ? SMALL_FONT_ID : UI_10_FONT_ID;
 }
 }  // namespace
 
 void QuickPickActivity::onEnter() {
   Activity::onEnter();
   // Re-reads the glance strip's own Calendar source from disk, the same
-  // "hydrate on entry" OrganizerScreenActivity::onEnter() -> loadCaches()
+  // "hydrate on entry" PlannerScreenActivity::onEnter() -> loadCaches()
   // already does for Calendar (CalendarActivity's own loadCaches() override)
   // -- QuickPickActivity extends Activity directly,
   // so it never gets that hook. Without this, Sync All's own reboot (see
@@ -376,7 +376,7 @@ void QuickPickActivity::completeTaskRow(const std::string& taskId) {
                            }
                            if (idx < tasks2.size()) {
                              RenderLock lock(*this);
-                             organizerActions::completeTask(idx);
+                             plannerActions::completeTask(idx);
                            }
                            afterRowAction();
                          });
@@ -445,7 +445,7 @@ void QuickPickActivity::offerRescheduleDatePickerRow(const std::string& taskId) 
                            }
                            if (idx < tasks2.size()) {
                              RenderLock lock(*this);
-                             organizerActions::rescheduleTask(idx, date->packedDate);
+                             plannerActions::rescheduleTask(idx, date->packedDate);
                            }
                            afterRowAction();
                          });
@@ -464,7 +464,7 @@ void QuickPickActivity::clearTaskDueDateRow(const std::string& taskId) {
 
   {
     RenderLock lock(*this);
-    organizerActions::rescheduleTask(cacheIndex, todoist::DUE_NONE);
+    plannerActions::rescheduleTask(cacheIndex, todoist::DUE_NONE);
   }
   afterRowAction();
 }
@@ -482,7 +482,7 @@ void QuickPickActivity::offerFocusSessionForTask(const std::string& taskId) {
   const std::string capturedText = tasks[cacheIndex].content;
 
   startActivityForResult(std::make_unique<OptionsMenuActivity>(renderer, mappedInput, StrId::STR_FOCUS_SESSION,
-                                                               organizerActions::focusSessionDurationOptions()),
+                                                               plannerActions::focusSessionDurationOptions()),
                          [this, capturedText, taskId](const ActivityResult& result) {
                            if (mappedInput.isPressed(MappedInputManager::Button::Right2)) {
                              swallowConfirmRelease = true;
@@ -492,10 +492,10 @@ void QuickPickActivity::offerFocusSessionForTask(const std::string& taskId) {
                            }
                            if (result.isCancelled) return;
                            const int idx = std::get<OptionPickResult>(result.data).index;
-                           if (idx < 0 || idx >= organizerActions::FOCUS_SESSION_DURATIONS_COUNT) return;
-                           organizerActions::beginFocusSession(capturedText, taskId,
-                                                               organizerActions::FOCUS_SESSION_DURATIONS_MINUTES[idx],
-                                                               renderer, mappedInput);
+                           if (idx < 0 || idx >= plannerActions::FOCUS_SESSION_DURATIONS_COUNT) return;
+                           plannerActions::beginFocusSession(capturedText, taskId,
+                                                             plannerActions::FOCUS_SESSION_DURATIONS_MINUTES[idx],
+                                                             renderer, mappedInput);
                          });
 }
 
@@ -1036,7 +1036,7 @@ void QuickPickActivity::renderTasksTab(const int top, const int height) const {
       if (isTwoLine(i)) {
         const bool showDate = showsDates && task.dueDays != todoist::DUE_NONE;
         char when[16] = "";
-        if (showDate) organizer::formatDayLabel(task.dueDays, when, sizeof(when));
+        if (showDate) planner::formatDayLabel(task.dueDays, when, sizeof(when));
         char subtitle[TodoistTask::LABELS_MAX_LEN + 32];
         if (showDate && !task.labels.empty()) {
           snprintf(subtitle, sizeof(subtitle), "%s  \xC2\xB7  %s", when, task.labels.c_str());
@@ -1063,7 +1063,7 @@ void QuickPickActivity::renderTasksTab(const int top, const int height) const {
 
 std::vector<QuickPickActivity::GlanceEventRow> QuickPickActivity::todaysEvents() const {
   std::vector<GlanceEventRow> rows;
-  const uint16_t today = organizerSync::todayLocalDate();
+  const uint16_t today = plannerSync::todayLocalDate();
   // Same fallback either way (no usable "today" to filter by is no more
   // useful to the user than a never-synced cache) -- both mean this line
   // cannot promise anything about what's actually happening today.
@@ -1443,7 +1443,7 @@ void QuickPickActivity::render(RenderLock&&) {
   const int tabBarTop = sectionTop + sectionTitleHeight;
 
   // tabBarFocused (not activeKind) decides whether the bar is drawn
-  // "focused" (matches OrganizerScreenActivity's own "index 0 is the tab
+  // "focused" (matches PlannerScreenActivity's own "index 0 is the tab
   // bar" convention, the same one loop() mirrors for Left1/Left2/Right2).
   std::vector<TabInfo> tabs;
   tabs.reserve(visibleTabs.size());
@@ -1502,7 +1502,7 @@ void QuickPickActivity::render(RenderLock&&) {
         // is already enough to roll onto, and there is nothing to roll on a
         // Logs tab.
         if (!embeddedOnLogs() && embeddedRowCount() > 0) backLabel = tr(STR_RANDOM);
-        // Same touch OrganizerScreenActivity's own tab bar gives Right2: its
+        // Same touch PlannerScreenActivity's own tab bar gives Right2: its
         // label previews the tab a press would switch to.
         if (visibleTabs.size() > 1) {
           int index = 0;

@@ -8,10 +8,10 @@
 #include <vector>
 
 #include "activities/Activity.h"
-#include "activities/organizer/TaskTabModel.h"
+#include "activities/planner/TaskTabModel.h"
 
 /**
- * The companion's own screen -- the main screen's "Tasker" tile
+ * The companion's own screen -- the main screen's "Planner" tile
  * (MainMenuActivity), reached with ActivityManager::goToCompanion(). Home itself
  * is that main screen now, so this one is a level below it: its status bar's
  * Right1 goes back there, and so does the home gesture. A big pose of the
@@ -52,7 +52,7 @@
  * project -- there is no "All" tab; the first visible one is the default; Logs
  * is selected from the title row like a project and shows today's completions
  * with no tab bar -- see
- * activities/organizer/TaskTabModel.h, shared with the real TasksActivity
+ * activities/planner/TaskTabModel.h, shared with the real TasksActivity
  * screen so the two never disagree about which task is in which tab),
  * confined to the space budget below the companion figure
  * (COMPANION_BUDGET_PERCENT). Acting on a row here updates the mood right
@@ -119,7 +119,7 @@
  *     "the start of the section" -- reachable regardless of whether the
  *     active tab has any rows; Right2 there cycles to the next of the
  *     currently-visible tabs (same convention every other tabbed screen in
- *     this app uses: OrganizerScreenActivity's own "index 0 is the tab
+ *     this app uses: PlannerScreenActivity's own "index 0 is the tab
  *     bar"), and Right1 is Random: it drops onto a random row of the active
  *     tab (nothing to randomize on a Logs tab, so it is blank there). From a
  *     row, Right1 is Back instead: it returns the cursor to that tab bar --
@@ -132,7 +132,7 @@
  *
  * Side Up/Down are overridden on this screen only: everywhere else in the
  * app they jump to the previous/next app in the home grid's own order (see
- * OrganizerScreenActivity/SettingsActivity's own identical block), but here
+ * PlannerScreenActivity/SettingsActivity's own identical block), but here
  * they step the title row to the previous/next project (stepProject()), from
  * whichever focus stop the cursor is on -- independent of
  * Left1/Left2/Right1/Right2 above. They carry no on-screen labels here, so the
@@ -288,7 +288,7 @@ class QuickPickActivity final : public Activity {
   // While focus == Embedded: whether the tab bar itself, not a row, has the
   // highlight -- "the start of the embedded section" (see this file's own
   // header comment), and always reachable there regardless of whether the
-  // active tab has any rows (mirrors OrganizerScreenActivity's own "index 0
+  // active tab has any rows (mirrors PlannerScreenActivity's own "index 0
   // is the tab bar" convention, just as a separate bool instead of folding
   // it into the row cursor's own index space).
   bool tabBarFocused = false;
@@ -315,7 +315,7 @@ class QuickPickActivity final : public Activity {
   // doesn't change mid-visit just from moving focus around the screen.
   uint8_t idleVariant = 0;
 
-  // See OrganizerScreenActivity's own swallow flags for why these exist: the
+  // See PlannerScreenActivity's own swallow flags for why these exist: the
   // Options popup (and the confirmation or number entry it can lead to)
   // answers on a button press, not its release, and that release is still
   // owed to this screen once the sub-activity it was pushed from closes.

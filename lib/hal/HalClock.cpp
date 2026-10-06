@@ -78,7 +78,7 @@ bool HalClock::getUtcDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint
   // Most boards (X3/X4 included) have no battery-backed RTC chip, so
   // _available is false and the branch above never runs there. The system
   // clock -- set once via SNTP, either by syncFromNTP() or as a side effect
-  // of any organizer sync (see OrganizerSync::resolveTodayDate()) -- is the
+  // of any planner sync (see PlannerSync::resolveTodayDate()) -- is the
   // only UTC source those boards have. sntp_get_sync_status() is NOT used to
   // gate this: it lives in normal RAM, which a deep-sleep wake reruns setup()
   // over and resets to "unsynced", even though the RTC-backed time offset

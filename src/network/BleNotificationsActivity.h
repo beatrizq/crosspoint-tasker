@@ -14,7 +14,7 @@ class BleNotificationsActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   size_t selectorIndex = 0;
   // An extra stop bolted onto selectorIndex, the same idiom
-  // OrganizerScreenActivity's own headerFocused uses.
+  // PlannerScreenActivity's own headerFocused uses.
   bool headerFocused = false;
   // Set when a long-press has fired; input is swallowed until Confirm is
   // released again so the release doesn't also open the detail view Select
@@ -23,7 +23,7 @@ class BleNotificationsActivity final : public Activity {
   bool longPressFired = false;
   // Side Up/Down jump to the previous/next app in the home grid's own order
   // -- the same shortcut every other app screen has (see
-  // OrganizerScreenActivity/QuickPickActivity's own identical block).
+  // PlannerScreenActivity/QuickPickActivity's own identical block).
   // Row-paging (buttonNavigator's onNext/onPreviousRelease) is still
   // reachable via front Left1/Left2, which NavNext/NavPrevious alias to
   // alongside side Up/Down -- see MappedInputManager::mapButton()'s own

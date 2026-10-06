@@ -95,7 +95,7 @@ void MainMenuActivity::activateFocused() {
     case Stop::Read:
       activityManager.goToReadMenu();
       break;
-    case Stop::Tasker:
+    case Stop::Planner:
       activityManager.goToCompanion();
       break;
   }
@@ -131,7 +131,7 @@ void MainMenuActivity::loop() {
     return;
   }
   if (mappedInput.wasTapInRect(0, layout.top + layout.height, width, layout.height)) {
-    focus = Stop::Tasker;
+    focus = Stop::Planner;
     activateFocused();
     return;
   }
@@ -175,7 +175,7 @@ void MainMenuActivity::render(RenderLock&&) {
   };
   const Tile tiles[] = {
       {Stop::Read, Read80Icon, tr(STR_MENU_READER)},
-      {Stop::Tasker, Tasks80Icon, tr(STR_MENU_TASKER)},
+      {Stop::Planner, Tasks80Icon, tr(STR_MENU_PLANNER)},
   };
 
   for (int i = 0; i < 2; i++) {

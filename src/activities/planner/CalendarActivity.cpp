@@ -12,11 +12,11 @@
 #include <utility>
 #include <vector>
 
-#include "OrganizerLabels.h"
+#include "PlannerLabels.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/HomeAppOrder.h"
-#include "util/OrganizerSync.h"
+#include "util/PlannerSync.h"
 #include "util/TaskWatchdog.h"
 
 void CalendarActivity::loadCaches() { GCAL_EVENTS.loadFromFile(); }
@@ -58,7 +58,7 @@ void CalendarActivity::formatStatus(char* out, const size_t outSize) const {
     return;
   }
   char date[16];
-  organizer::formatDayLabel(GCAL_EVENTS.getSyncDate(), date, sizeof(date));
+  planner::formatDayLabel(GCAL_EVENTS.getSyncDate(), date, sizeof(date));
   snprintf(out, outSize, "%s", date);
 }
 
@@ -83,9 +83,9 @@ void CalendarActivity::startSync() {
 }
 
 void CalendarActivity::performCalendarSync() {
-  // The requests and the cache update live in organizerSync so the home screen's
+  // The requests and the cache update live in plannerSync so the home screen's
   // sync-everything can drive the same sequence over one Wi-Fi association.
-  const char* failure = organizerSync::run(organizerSync::Service::Calendar);
+  const char* failure = plannerSync::run(plannerSync::Service::Calendar);
 
   // Drop the radio before repainting; the full teardown happens on the silent
   // reboot in onExit().
@@ -103,7 +103,7 @@ void CalendarActivity::formatEventWhen(const int index, char* out, const size_t 
   if (civil::monthFromDate(event.date) == 0) return;
 
   char when[16];
-  organizer::formatDayLabel(event.date, when, sizeof(when));
+  planner::formatDayLabel(event.date, when, sizeof(when));
 
   if (event.isAllDay()) {
     snprintf(out, outSize, "%s  %s", when, tr(STR_GCAL_ALL_DAY));

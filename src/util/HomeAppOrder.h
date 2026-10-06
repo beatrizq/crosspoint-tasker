@@ -120,7 +120,7 @@ void format(const int (&order)[APP_COUNT], char* out, size_t outSize);
  * now (Notifications without ENABLE_BLE_NOTIFY_SPIKE, Companion while
  * disabled -- the same gates HomeActivity::buildEntries() applies), and
  * wrapping at either end. Backs the side Left/Right "previous/next app"
- * shortcut every app screen has (see e.g. OrganizerScreenActivity's own
+ * shortcut every app screen has (see e.g. PlannerScreenActivity's own
  * loop()) -- reusing this rather than each screen re-deriving the visible
  * order keeps it consistent with what Home's own grid would actually show.
  * Falls back to the first visible app if `current` itself is not one (should

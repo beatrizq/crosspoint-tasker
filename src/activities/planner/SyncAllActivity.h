@@ -4,17 +4,17 @@
 #include <utility>
 
 #include "activities/Activity.h"
-#include "util/OrganizerSync.h"
+#include "util/PlannerSync.h"
 
 /**
  * Syncs every configured integration in one go, over one Wi-Fi association.
  *
  * Reached by focusing any screen's own status bar and pressing Select (see
- * ActivityManager::goToSyncAll()). Each organizer screen can already sync
+ * ActivityManager::goToSyncAll()). Each planner screen can already sync
  * itself, but doing all four that way means associating four times and
  * rebooting between each - every one of those screens reboots on exit to
  * reclaim the Wi-Fi/TLS heap. Here the radio comes up once, the four syncs
- * run back to back through organizerSync, and the radio goes down once.
+ * run back to back through plannerSync, and the radio goes down once.
  *
  * Progress is shown per service as it goes, because these are network round
  * trips: a screen that said nothing for forty seconds would look hung. Each row
@@ -27,7 +27,7 @@
  * should not cost the rest of the sync.
  *
  * Requests cannot be interrupted once started, so Back is ignored until the run
- * finishes. Like the organizer screens, this reboots on exit once the radio has
+ * finishes. Like the planner screens, this reboots on exit once the radio has
  * been up.
  */
 class SyncAllActivity final : public Activity {
@@ -64,8 +64,8 @@ class SyncAllActivity final : public Activity {
   // Translated status for the row's right-hand column.
   const char* rowStatus(int index) const;
 
-  RowState states[organizerSync::SERVICE_COUNT] = {};
-  const char* messages[organizerSync::SERVICE_COUNT] = {};
+  RowState states[plannerSync::SERVICE_COUNT] = {};
+  const char* messages[plannerSync::SERVICE_COUNT] = {};
 
   // Set once the whole run is over, which is what re-enables Back.
   bool finished = false;

@@ -26,21 +26,21 @@ namespace {
 // value RecentBooksActivity's long-press-to-remove uses).
 constexpr unsigned long LONG_PRESS_MS = 1000;
 
-// Same font selection as OrganizerScreenActivity's titleFontId()/
+// Same font selection as PlannerScreenActivity's titleFontId()/
 // subtitleFontId() (Tasks/Calendar) -- not inherited from
 // there, since that base class also brings tabs and an unconditional
 // WiFi-teardown reboot-on-exit this screen has no use for, but the user
 // asked for the same reading experience, so the two font choices are kept in
 // lockstep with those screens' own logic.
 int titleFontId() {
-  return SETTINGS.organizerFontSize == CrossPointSettings::ORGANIZER_FONT_SMALL ? UI_10_FONT_ID : UI_12_FONT_ID;
+  return SETTINGS.plannerFontSize == CrossPointSettings::PLANNER_FONT_SMALL ? UI_10_FONT_ID : UI_12_FONT_ID;
 }
 
 int subtitleFontId() {
-  return SETTINGS.organizerFontSize == CrossPointSettings::ORGANIZER_FONT_SMALL ? SMALL_FONT_ID : UI_10_FONT_ID;
+  return SETTINGS.plannerFontSize == CrossPointSettings::PLANNER_FONT_SMALL ? SMALL_FONT_ID : UI_10_FONT_ID;
 }
 
-// Same dither-overlay technique as OrganizerScreenActivity::dimText(): this
+// Same dither-overlay technique as PlannerScreenActivity::dimText(): this
 // e-ink panel has no real greyscale, so "dimmed" text is solid text with a
 // checkerboard of pixels punched back out over it. Call after drawText() at
 // the same position.
@@ -174,7 +174,7 @@ void BleNotificationsActivity::loop() {
   if (swipe == MappedInputManager::SwipeDir::Up) {
     // A swipe is a page-jump, not a single step, so it always leaves the
     // header stop (if it was focused) -- same reasoning as
-    // OrganizerScreenActivity's own swipe handling.
+    // PlannerScreenActivity's own swipe handling.
     headerFocused = false;
     selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), itemCount, pageItems);
     requestUpdate();
@@ -219,7 +219,7 @@ void BleNotificationsActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   // Same header-status slot Tasks/Calendar use for their own
-  // sync info -- this screen isn't an OrganizerScreenActivity (see this
+  // sync info -- this screen isn't a PlannerScreenActivity (see this
   // file's own header comment), so it sets the status directly rather than
   // through that base class's formatStatus() override point.
   const Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};

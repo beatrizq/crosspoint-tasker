@@ -8,7 +8,7 @@
 
 /**
  * Settings submenu for the organizing companion: its nickname, mood display,
- * and mood-ladder thresholds. Reached from the Organizer tab like the other
+ * and mood-ladder thresholds. Reached from the Planner tab like the other
  * integrations (Todoist, Google Calendar), even though there is nothing to
  * sync here -- everything it controls is local, not an account to connect.
  *

@@ -5,10 +5,10 @@
 
 /**
  * The app's main screen: the status bar (the theme's clock/date/battery row) and
- * two large tiles stacked vertically -- Reader and Tasker. Reader opens the Read menu;
- * Tasker opens the Companion screen (QuickPickActivity).
+ * two large tiles stacked vertically -- Reader and Planner. Reader opens the Read menu;
+ * Planner opens the Companion screen (QuickPickActivity).
  *
- * Focus is one continuous loop of three stops -- the status bar, Read, Tasker --
+ * Focus is one continuous loop of three stops -- the status bar, Read, Planner --
  * wrapping at both ends (Left2/side Down forward, Left1/side Up the reverse).
  * Right2 acts on the focused stop: Sync All on the status bar, otherwise opens the
  * tile. Right1 is Settings from anywhere on this screen, since there is nowhere
@@ -31,7 +31,7 @@ class MainMenuActivity final : public Activity {
 
  private:
   // The stops of the focus loop, in visual top-to-bottom order.
-  enum class Stop : uint8_t { StatusBar, Read, Tasker };
+  enum class Stop : uint8_t { StatusBar, Read, Planner };
   static constexpr int STOP_COUNT = 3;
 
   void activateFocused();

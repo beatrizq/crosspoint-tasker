@@ -24,7 +24,7 @@ class FileBrowserActivity final : public Activity {
 
   size_t selectorIndex = 0;
   // An extra stop bolted onto selectorIndex, the same idiom
-  // OrganizerScreenActivity's own headerFocused uses -- Books mode only (see
+  // PlannerScreenActivity's own headerFocused uses -- Books mode only (see
   // loop()'s own comment): a firmware/image picker is a narrow, single-
   // purpose flow with no reason to reach Sync All from it.
   bool headerFocused = false;

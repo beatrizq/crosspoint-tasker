@@ -11,7 +11,7 @@
 #include "CrossPointSettings.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/OrganizerSleepScreen.h"
+#include "util/PlannerSleepScreen.h"
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
     : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
@@ -147,7 +147,7 @@ void BmpViewerActivity::onExit() {
 void BmpViewerActivity::doSetSleepCover() {
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
 
-  const bool success = organizerSleepScreen::installCustomWallpaper(filePath);
+  const bool success = plannerSleepScreen::installCustomWallpaper(filePath);
   GUI.drawPopup(renderer, success ? tr(STR_DONE) : tr(STR_FAILED_LOWER));
 
   delay(1000);

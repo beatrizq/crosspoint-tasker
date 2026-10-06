@@ -1,4 +1,4 @@
-#include "OrganizerSync.h"
+#include "PlannerSync.h"
 
 #include <CivilTime.h>
 #include <GCalAuth.h>
@@ -26,7 +26,7 @@
 #include "util/HomeAppOrder.h"
 #include "util/TaskWatchdog.h"
 
-namespace organizerSync {
+namespace plannerSync {
 namespace {
 
 // SNTP poll: 100ms x 50 = 5s, matching HalClock::syncFromNTP().
@@ -385,4 +385,4 @@ const char* run(const Service service) {
   return nullptr;
 }
 
-}  // namespace organizerSync
+}  // namespace plannerSync

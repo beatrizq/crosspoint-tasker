@@ -18,7 +18,7 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 
 - **Todoist**: today's tasks and overdue count on the device, complete them with a button, offline completion queue, and an optional task-list sleep screen ([docs](docs/todoist.md)).
 
-- **YNAB**: the balances of the budget categories you pick, on the Organizer's Budget tab ([docs](docs/ynab.md)).
+- **YNAB**: the balances of the budget categories you pick, on the Planner's Budget tab ([docs](docs/ynab.md)).
 
 - **Screenshots.**
 

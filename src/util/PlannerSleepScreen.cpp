@@ -1,4 +1,4 @@
-#include "OrganizerSleepScreen.h"
+#include "PlannerSleepScreen.h"
 
 #include <HalStorage.h>
 #include <Logging.h>
@@ -6,7 +6,7 @@
 
 #include "CrossPointSettings.h"
 
-namespace organizerSleepScreen {
+namespace plannerSleepScreen {
 namespace {
 
 // One SD block-aligned chunk, on the heap rather than the stack: 2KB is an
@@ -56,4 +56,4 @@ bool installCustomWallpaper(const std::string& sourcePath) {
   return true;
 }
 
-}  // namespace organizerSleepScreen
+}  // namespace plannerSleepScreen

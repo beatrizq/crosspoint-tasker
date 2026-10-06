@@ -22,8 +22,8 @@ void SyncAllActivity::onEnter() {
   // Which services are worth a request. Decided once, up front, so the list on
   // screen does not change shape while the run is going.
   int configured = 0;
-  for (int i = 0; i < organizerSync::SERVICE_COUNT; i++) {
-    const bool ready = organizerSync::isConfigured(organizerSync::serviceAt(i));
+  for (int i = 0; i < plannerSync::SERVICE_COUNT; i++) {
+    const bool ready = plannerSync::isConfigured(plannerSync::serviceAt(i));
     states[i] = ready ? RowState::Waiting : RowState::Skipped;
     if (ready) configured++;
   }
@@ -59,7 +59,7 @@ void SyncAllActivity::onEnter() {
                                RenderLock lock;
                                // Nothing was reached, so every row says so rather
                                // than one of them owning the Wi-Fi failure.
-                               for (int i = 0; i < organizerSync::SERVICE_COUNT; i++) {
+                               for (int i = 0; i < plannerSync::SERVICE_COUNT; i++) {
                                  if (states[i] == RowState::Waiting) {
                                    states[i] = RowState::Failed;
                                    messages[i] = tr(STR_WIFI_CONN_FAILED);
@@ -76,7 +76,7 @@ void SyncAllActivity::onEnter() {
 
 void SyncAllActivity::onExit() {
   Activity::onExit();
-  // Same teardown as the organizer screens: drop the association, then reboot
+  // Same teardown as the planner screens: drop the association, then reboot
   // silently so the WiFi/TLS heap fragmentation goes with it. The mode check
   // keeps a cancelled Wi-Fi picker (radio never brought up) from costing a
   // reboot; a run that already took the radio down reports WIFI_MODE_NULL by
@@ -95,7 +95,7 @@ void SyncAllActivity::runAll() {
   // otherwise leave the clock untouched even though WiFi is already up here.
   halClock.syncFromNTP();
 
-  for (int i = 0; i < organizerSync::SERVICE_COUNT; i++) {
+  for (int i = 0; i < plannerSync::SERVICE_COUNT; i++) {
     if (states[i] != RowState::Waiting) continue;
 
     {
@@ -107,7 +107,7 @@ void SyncAllActivity::runAll() {
     // screen would sit on a stale list through the whole thing.
     requestUpdateAndWait();
 
-    const char* failure = organizerSync::run(organizerSync::serviceAt(i));
+    const char* failure = plannerSync::run(plannerSync::serviceAt(i));
 
     {
       RenderLock lock;
@@ -115,7 +115,7 @@ void SyncAllActivity::runAll() {
       messages[i] = failure;
     }
     if (failure != nullptr) {
-      LOG_ERR("SYNCALL", "%s failed: %s", organizerSync::name(organizerSync::serviceAt(i)), failure);
+      LOG_ERR("SYNCALL", "%s failed: %s", plannerSync::name(plannerSync::serviceAt(i)), failure);
     }
     // Deliberately not breaking on failure: the two are independent accounts,
     // and one expired token should not cost the rest of the run.
@@ -124,7 +124,7 @@ void SyncAllActivity::runAll() {
   // Once, at the end, rather than after each service - which is the whole point
   // of this screen. Through WiFi.mode(WIFI_OFF) rather than by stopping the
   // driver directly, for the reason spelled out on
-  // OrganizerScreenActivity::tearDownRadio.
+  // PlannerScreenActivity::tearDownRadio.
   WiFi.mode(WIFI_OFF);
   radioTornDown = true;
 
@@ -133,7 +133,7 @@ void SyncAllActivity::runAll() {
     finished = true;
   }
   // Waited for, not fired and forgotten (see the same reasoning above line 97):
-  // Calendar is always the last service in organizerSync's fixed order, so its
+  // Calendar is always the last service in plannerSync's fixed order, so its
   // terminal Done/Failed state has no later iteration to force a confirmed
   // repaint the way Tasks gets for free. An unconfirmed
   // requestUpdate(true) here left the screen stuck on Calendar's last confirmed
@@ -191,9 +191,9 @@ void SyncAllActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_SYNC_ALL_NOTHING));
   } else {
     GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, organizerSync::SERVICE_COUNT,
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, plannerSync::SERVICE_COUNT,
         // No selection: nothing here is navigable, so no row is highlighted.
-        -1, [](int index) -> std::string { return std::string(organizerSync::name(organizerSync::serviceAt(index))); },
+        -1, [](int index) -> std::string { return std::string(plannerSync::name(plannerSync::serviceAt(index))); },
         nullptr, nullptr, [this](int index) -> std::string { return std::string(rowStatus(index)); }, true,
         // A service that was never set up is dimmed, so the eye goes to the ones
         // that actually ran.

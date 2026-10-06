@@ -9,7 +9,7 @@
 #include "util/HomeAppOrder.h"
 
 /**
- * Shared chrome for the three organizer screens: Tasks, Calendar and Budget.
+ * Shared chrome for the three planner screens: Tasks, Calendar and Budget.
  *
  * These were one screen with a Tasks/Calendar/Budget tab bar. They are now a
  * screen each, reached from its own home tile, and the tab bar belongs to the
@@ -24,7 +24,7 @@
  *
  * Selection index 0 focuses the tab bar and 1..n are list rows, as on the
  * settings screen. Rows are drawn by the subclass rather than through
- * GUI.drawList because the list font follows SETTINGS.organizerFontSize; the
+ * GUI.drawList because the list font follows SETTINGS.plannerFontSize; the
  * theme's list draws at a fixed size.
  *
  * Each screen deliberately reboots on exit to reclaim Wi-Fi/TLS heap, so
@@ -33,7 +33,7 @@
  * Tasks -> Calendar is now a screen change and so pays it, where before it was
  * a tab switch.
  */
-class OrganizerScreenActivity : public Activity {
+class PlannerScreenActivity : public Activity {
  public:
   void onEnter() override;
   void onExit() override;
@@ -56,12 +56,12 @@ class OrganizerScreenActivity : public Activity {
     int width;         // Width of the text column
     int height;        // Full row height, separator included
     int textY;         // Top of the title line
-    int titleFont;     // Follows SETTINGS.organizerFontSize
+    int titleFont;     // Follows SETTINGS.plannerFontSize
     int subtitleFont;  // One step below the title
     bool ink;          // False on the selected row, whose fill is black
   };
 
-  OrganizerScreenActivity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput, int initialTab);
+  PlannerScreenActivity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput, int initialTab);
 
   // -- what each screen supplies --------------------------------------------
 

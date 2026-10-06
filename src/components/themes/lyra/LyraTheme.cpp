@@ -16,7 +16,7 @@
 #include <vector>
 
 #include "RecentBooksStore.h"
-#include "activities/organizer/OrganizerLabels.h"
+#include "activities/planner/PlannerLabels.h"
 #include "components/UITheme.h"
 #include "components/icons/bell80.h"
 #include "components/icons/book.h"
@@ -232,7 +232,7 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     // rides alongside it, middle-dot separated (same glyph and spacing
     // QuickPickActivity's own age/highscore status line used to use), in the
     // same "Mon 17 Aug" format Tasks/Calendar already use for
-    // their own header date (organizer::formatDayLabel) -- silently dropped
+    // their own header date (planner::formatDayLabel) -- silently dropped
     // along with the time when the clock isn't usable yet, same as the time
     // itself. UI_10_FONT_ID and the clock icon match QuickPickActivity's own
     // glance-strip rows (icon + slightly larger text than the old SMALL_FONT_ID
@@ -250,7 +250,7 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
       uint8_t minute = 0;
       if (halClock.getUtcDateTime(year, month, day, hour, minute)) {
         char dateBuf[16];
-        organizer::formatDayLabel(civil::packDate(year, month, day), dateBuf, sizeof(dateBuf));
+        planner::formatDayLabel(civil::packDate(year, month, day), dateBuf, sizeof(dateBuf));
         snprintf(headerClock, sizeof(headerClock), "%s  \xC2\xB7  %s", timeBuf, dateBuf);
       }
       const int clockIconX = rect.x + LyraMetrics::values.contentSidePadding;

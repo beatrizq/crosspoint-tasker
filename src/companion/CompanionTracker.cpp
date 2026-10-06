@@ -10,7 +10,7 @@
 
 #include "CompanionState.h"
 #include "CrossPointSettings.h"
-#include "util/OrganizerSync.h"
+#include "util/PlannerSync.h"
 
 namespace {
 // clockUtcOffsetQ is biased by 48 so it fits in a uint8_t (48 == UTC+0).
@@ -69,7 +69,7 @@ bool CompanionTracker::resolveLocalDayAndMinute(int32_t& outDay, uint16_t& outMi
   // so a clock that only becomes valid later still gets the stale data
   // cleared the next time either is looked at.
   TODOIST_TASKS.clearCompletedIfStale(
-      civil::dateFromIso(organizerSync::localIsoDateFromUtc(year, month, day, hour, minute).c_str()));
+      civil::dateFromIso(plannerSync::localIsoDateFromUtc(year, month, day, hour, minute).c_str()));
 
   const int32_t offset = signedUtcOffsetQuarterHours();
   outDay = companion::localDayNumber(year, month, day, hour, minute, offset);

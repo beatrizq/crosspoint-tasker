@@ -36,10 +36,10 @@ enum class SettingAction {
   LibraryMenu,
 };
 
-// A group of settings. The tab bar shows Display, Reader, System and Organizer;
+// A group of settings. The tab bar shows Display, Reader, System and Planner;
 // Controls and Library are submenus opened from the Reader tab, each shown by its
 // own SettingsActivity with just that group (a one-tab bar, Back returns).
-enum class SettingsBucket : uint8_t { None, Display, Reader, Controls, Library, System, Organizer };
+enum class SettingsBucket : uint8_t { None, Display, Reader, Controls, Library, System, Planner };
 
 struct SettingInfo {
   StrId nameId;
@@ -171,7 +171,7 @@ class SettingsActivity final : public Activity {
   int selectedSettingIndex = 0;
   int settingsCount = 0;
   // An extra stop bolted onto selectedSettingIndex, ahead of its own existing
-  // "0 == tab bar" stop -- the same idiom OrganizerScreenActivity's own
+  // "0 == tab bar" stop -- the same idiom PlannerScreenActivity's own
   // headerFocused uses, just one level higher up: header, then tab bar
   // (categories), then setting rows.
   bool headerFocused = false;
@@ -182,7 +182,7 @@ class SettingsActivity final : public Activity {
   std::vector<SettingInfo> librarySettings;
   std::vector<SettingInfo> controlsSettings;
   std::vector<SettingInfo> systemSettings;
-  std::vector<SettingInfo> organizerSettings;
+  std::vector<SettingInfo> plannerSettings;
   const std::vector<SettingInfo>* currentSettings = nullptr;
 
   bool preserveQuickResumeTimeoutOn = false;
@@ -215,7 +215,7 @@ class SettingsActivity final : public Activity {
       tabBuckets = {only};
     } else {
       // System first: it is the tab Settings opens on.
-      tabBuckets = {SettingsBucket::System, SettingsBucket::Display, SettingsBucket::Reader, SettingsBucket::Organizer};
+      tabBuckets = {SettingsBucket::System, SettingsBucket::Display, SettingsBucket::Reader, SettingsBucket::Planner};
     }
   }
   void onEnter() override;

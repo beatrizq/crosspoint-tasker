@@ -62,7 +62,7 @@ class GCalClient {
    *
    * `http`: caller-owned connection, shared across a sync's per-calendar calls
    * so SecureHttpClient's own keep-alive can actually take effect (see
-   * organizerSync::runCalendar()) - this function neither constructs nor ends
+   * plannerSync::runCalendar()) - this function neither constructs nor ends
    * it.
    */
   static Error fetchEvents(freeink::SecureHttpClient& http, const std::string& accessToken,

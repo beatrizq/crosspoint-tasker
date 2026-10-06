@@ -160,7 +160,7 @@ void TodoistSettingsActivity::render(RenderLock&&) {
           case ROW_FILTER:
             return std::string(I18n::getInstance().get(StrId::STR_TODOIST_FILTER));
           default:
-            return std::string(I18n::getInstance().get(StrId::STR_ORGANIZER_HOLD_TO_SYNC));
+            return std::string(I18n::getInstance().get(StrId::STR_PLANNER_HOLD_TO_SYNC));
         }
       },
       nullptr, nullptr,

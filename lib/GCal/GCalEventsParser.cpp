@@ -155,7 +155,7 @@ void GCalEventsParser::sOnObjectStart(void* ctx) {
     case Position::IN_EVENT_OBJECT:
       self->eventDepth++;
       // Only the object opened right after "start"/"end" is that stamp; sibling
-      // objects (originalStartTime, creator, organizer) carry their own "date".
+      // objects (originalStartTime, creator, planner) carry their own "date".
       if (self->lastKey == LastKey::EVENT_START && self->startDepth == 0) {
         self->startDepth = self->eventDepth;
       } else if (self->lastKey == LastKey::EVENT_END && self->endDepth == 0) {

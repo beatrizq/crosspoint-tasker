@@ -16,7 +16,7 @@ class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   // An extra stop bolted onto selectorIndex, the same idiom
-  // OrganizerScreenActivity's own headerFocused uses: "previous" from
+  // PlannerScreenActivity's own headerFocused uses: "previous" from
   // selectorIndex == 0 lands here instead of wrapping to the last entry,
   // "next" from here returns to selectorIndex == 0, "previous" from here
   // wraps to the last entry. Right2 here opens Sync All.

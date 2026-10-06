@@ -401,7 +401,7 @@ void HomeActivity::loop() {
   if (swipe == MappedInputManager::SwipeDir::Up) {
     // A swipe is a page-jump, not a single step, so it always leaves the
     // header stop (if it was focused) -- same reasoning as
-    // OrganizerScreenActivity's own swipe handling.
+    // PlannerScreenActivity's own swipe handling.
     headerFocused = false;
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
     requestUpdate();

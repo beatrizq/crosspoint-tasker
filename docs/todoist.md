@@ -37,7 +37,7 @@ stays queued.
 
 Whenever the task list changes — after a successful sync, and after completing a task, which changes the list with
 the radio off — the rendered list is saved to `/sleep.bmp` and the sleep screen mode is switched to **Custom**, so the
-sleeping device shows your task list. Turn it off with **Settings → Tasker → Todoist → Sleep
+sleeping device shows your task list. Turn it off with **Settings → Planner → Todoist → Sleep
 Screen**.
 
 `/sleep.bmp` is also where the image viewer's **Set Cover** action writes, so the first task screenshot would replace

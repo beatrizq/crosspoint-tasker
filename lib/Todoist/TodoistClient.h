@@ -71,7 +71,7 @@ class TodoistClient {
    *
    * `http`: caller-owned connection, shared across a sync's calls to this same
    * host so SecureHttpClient's own keep-alive can actually take effect (see
-   * organizerSync::runTasks()) - this function neither constructs nor ends it.
+   * plannerSync::runTasks()) - this function neither constructs nor ends it.
    */
   static Error fetchTasks(freeink::SecureHttpClient& http, const std::string& filter,
                           std::vector<TodoistTask>& outTasks, std::string& outServerDate);

@@ -117,7 +117,7 @@ class ActivityManager {
   void goToRecentBooks(bool returnToReadMenu = false);
   // initialTab is an index into the target screen's tab bar; the header cannot
   // name those types without pulling the activities in. Out-of-range values are
-  // clamped to the first tab by OrganizerScreenActivity::onEnter().
+  // clamped to the first tab by PlannerScreenActivity::onEnter().
   // selectTaskId, when non-empty, lands the screen on that specific task's row
   // instead of row 0 -- see TasksActivity's own constructor comment.
   void goToTasks(uint8_t initialTab = 0, std::string selectTaskId = "");  // 0 = first tab
@@ -139,7 +139,7 @@ class ActivityManager {
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE);
-  // Opens the companion screen (QuickPickActivity, the main screen's "Tasker"
+  // Opens the companion screen (QuickPickActivity, the main screen's "Planner"
   // tile) fresh -- also goToApp()'s AppId::Companion case.
   void goToCompanion();
   // Dispatches to whichever of the goTo* methods above opens `id`'s own

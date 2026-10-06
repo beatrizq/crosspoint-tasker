@@ -27,7 +27,7 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // stamps this here instead.
   bool lastSleepFromQuickPick = false;
 
-  // A running focus session, mirrored on start (organizerActions::beginFocusSession)
+  // A running focus session, mirrored on start (plannerActions::beginFocusSession)
   // and cleared once consumed (FocusSessionActivity, once the countdown
   // elapses or turns out to have nothing to time against) so a reboot mid-session
   // resumes the lock instead of losing it -- the whole point of the lock is that
@@ -40,7 +40,7 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   std::string focusSessionItemId;
   // Absolute end time as (UTC day number * 1440) + minute-of-day, comparable
   // across a reboot without any calendar bookkeeping -- see
-  // companion::localDayNumber() and organizerActions::computeFocusSessionEnd().
+  // companion::localDayNumber() and plannerActions::computeFocusSessionEnd().
   int32_t focusSessionEndAbsMinutes = 0;
   // The same end time as a UTC hour/minute, kept only for display -- formatted
   // into the user's local time the way the status bar clock is (see

@@ -1,4 +1,4 @@
-#include "OrganizerActions.h"
+#include "PlannerActions.h"
 
 #include <CompanionMood.h>
 #include <GfxRenderer.h>
@@ -14,7 +14,7 @@
 #include "activities/home/FocusSessionActivity.h"
 #include "companion/CompanionTracker.h"
 
-namespace organizerActions {
+namespace plannerActions {
 
 void completeTask(const size_t cacheIndex) {
   if (cacheIndex >= TODOIST_TASKS.getTasks().size()) return;
@@ -80,4 +80,4 @@ std::vector<std::string> focusSessionDurationOptions() {
   return options;
 }
 
-}  // namespace organizerActions
+}  // namespace plannerActions

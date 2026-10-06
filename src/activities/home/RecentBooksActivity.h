@@ -15,7 +15,7 @@ class RecentBooksActivity final : public Activity {
 
   size_t selectorIndex = 0;
   // An extra stop bolted onto selectorIndex, the same idiom
-  // OrganizerScreenActivity's own headerFocused uses.
+  // PlannerScreenActivity's own headerFocused uses.
   bool headerFocused = false;
 
   // Set when a long-press has fired; input is swallowed until Confirm is released

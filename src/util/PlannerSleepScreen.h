@@ -11,7 +11,7 @@
  * overwrites a sleep_custom.bmp the user put on the card themselves. To go
  * back to sleep_custom.bmp, delete the cover file.
  */
-namespace organizerSleepScreen {
+namespace plannerSleepScreen {
 
 // Where the image picked with "Set Cover" lives, next to the app's own settings.
 inline constexpr char COVER_PATH[] = "/.crosspoint/sleep_cover.bmp";
@@ -27,4 +27,4 @@ inline constexpr char CUSTOM_PATH[] = "/sleep_custom.bmp";
  */
 bool installCustomWallpaper(const std::string& sourcePath);
 
-}  // namespace organizerSleepScreen
+}  // namespace plannerSleepScreen

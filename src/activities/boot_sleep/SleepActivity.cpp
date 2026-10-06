@@ -16,7 +16,7 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
-#include "util/OrganizerSleepScreen.h"
+#include "util/PlannerSleepScreen.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
@@ -77,7 +77,7 @@ void SleepActivity::renderCustomSleepScreen() const {
   // own sleep_custom.bmp on the root of the sd card (sleep.bmp, its old name,
   // still works) -- any of them takes priority over the /sleep folder. They are
   // separate files so that picking a wallpaper never overwrites the user's own.
-  for (const char* path : {organizerSleepScreen::COVER_PATH, organizerSleepScreen::CUSTOM_PATH, "/sleep.bmp"}) {
+  for (const char* path : {plannerSleepScreen::COVER_PATH, plannerSleepScreen::CUSTOM_PATH, "/sleep.bmp"}) {
     HalFile file;
     if (!Storage.openFileForRead("SLP", path, file)) continue;
     Bitmap bitmap(file, true);

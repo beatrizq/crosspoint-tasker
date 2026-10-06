@@ -4,7 +4,7 @@
 #include <string>
 
 /**
- * The network half of each organizer screen's sync, callable on its own.
+ * The network half of each planner screen's sync, callable on its own.
  *
  * Each of Tasks and Calendar used to own its whole sync: the
  * requests, applying the result to its cache, and the radio either side. That
@@ -21,7 +21,7 @@
  * link - and reset the task watchdog as they go, exactly as the per-screen syncs
  * did. Call them from the main task with the radio already up.
  */
-namespace organizerSync {
+namespace plannerSync {
 
 enum class Service : uint8_t {
   Tasks = 0,
@@ -75,4 +75,4 @@ std::string localIsoDateFromUtc(uint16_t year, uint8_t month, uint8_t day, uint8
  */
 uint16_t todayLocalDate();
 
-}  // namespace organizerSync
+}  // namespace plannerSync

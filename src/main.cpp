@@ -45,7 +45,7 @@
 #include "network/BleNotificationQueue.h"
 #endif
 #include "util/ButtonNavigator.h"
-#include "util/OrganizerSync.h"
+#include "util/PlannerSync.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -346,7 +346,7 @@ void setup() {
   // boot, using whatever the clock already knows -- no WiFi/NTP forced here,
   // since boot must not block on the network. This is what catches the
   // common case (the device sat in deep sleep and its clock tracked the days
-  // correctly the whole time); organizerSync::runTasks() covers
+  // correctly the whole time); plannerSync::runTasks() covers
   // the other case, where the clock itself was only wrong until a sync
   // corrected it. See TodoistTaskCache::clearCompletedIfStale()'s own
   // comment for what this is protecting against.
@@ -355,7 +355,7 @@ void setup() {
     uint8_t month, day, hour, minute;
     if (halClock.getUtcDateTime(year, month, day, hour, minute)) {
       TODOIST_TASKS.clearCompletedIfStale(
-          civil::dateFromIso(organizerSync::localIsoDateFromUtc(year, month, day, hour, minute).c_str()));
+          civil::dateFromIso(plannerSync::localIsoDateFromUtc(year, month, day, hour, minute).c_str()));
     }
   }
 #ifdef ENABLE_BLE_NOTIFY_SPIKE
@@ -503,7 +503,7 @@ void setup() {
     // Boot to the app menu (Home) if no book is open, last sleep was not from
     // reader, back button is held, or reader activity crashed (indicated by
     // readerActivityLoadCount > 0). The companion screen (the main screen's
-    // "Tasker" tile) is reached from there, or by the lastSleepFromQuickPick
+    // "Planner" tile) is reached from there, or by the lastSleepFromQuickPick
     // resume branch above when that is genuinely what was open at sleep.
     activityManager.goHome();
   } else {

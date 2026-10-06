@@ -46,8 +46,8 @@ StrId SettingsActivity::bucketName(const SettingsBucket bucket) {
       return StrId::STR_CAT_LIBRARY;
     case SettingsBucket::System:
       return StrId::STR_CAT_SYSTEM;
-    case SettingsBucket::Organizer:
-      return StrId::STR_CAT_ORGANIZER;
+    case SettingsBucket::Planner:
+      return StrId::STR_CAT_PLANNER;
     case SettingsBucket::Display:
     case SettingsBucket::None:
       break;
@@ -61,7 +61,7 @@ void SettingsActivity::rebuildSettingsLists() {
   controlsSettings.clear();
   librarySettings.clear();
   systemSettings.clear();
-  organizerSettings.clear();
+  plannerSettings.clear();
 
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
@@ -91,8 +91,8 @@ void SettingsActivity::rebuildSettingsLists() {
       librarySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);
-    } else if (setting.category == StrId::STR_CAT_ORGANIZER) {
-      organizerSettings.push_back(setting);
+    } else if (setting.category == StrId::STR_CAT_PLANNER) {
+      plannerSettings.push_back(setting);
     }
   }
 
@@ -105,9 +105,9 @@ void SettingsActivity::rebuildSettingsLists() {
   // Where books come from and how reading progress follows them around.
   librarySettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   librarySettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
-  organizerSettings.push_back(SettingInfo::Action(StrId::STR_TODOIST, SettingAction::Todoist));
-  organizerSettings.push_back(SettingInfo::Action(StrId::STR_CALENDAR, SettingAction::GoogleCalendar));
-  organizerSettings.push_back(SettingInfo::Action(StrId::STR_COMPANION, SettingAction::Companion));
+  plannerSettings.push_back(SettingInfo::Action(StrId::STR_TODOIST, SettingAction::Todoist));
+  plannerSettings.push_back(SettingInfo::Action(StrId::STR_CALENDAR, SettingAction::GoogleCalendar));
+  plannerSettings.push_back(SettingInfo::Action(StrId::STR_COMPANION, SettingAction::Companion));
   // TODO: Touch devices need their own firmware update path/artifacts before OTA is exposed.
   if (!BoardConfig::hasTouch()) {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
@@ -145,7 +145,7 @@ void SettingsActivity::rebuildSettingsLists() {
 }
 
 // The one place category index maps to a bucket. It used to be written twice -
-// here and as a lambda in loop() - and adding the Organizer tab updated only
+// here and as a lambda in loop() - and adding the Planner tab updated only
 // this copy, so selecting that tab left the list showing System's entries.
 void SettingsActivity::applyCategorySelection() {
   const int index = selectedCategoryIndex >= 0 && selectedCategoryIndex < categoryCount() ? selectedCategoryIndex : 0;
@@ -162,8 +162,8 @@ void SettingsActivity::applyCategorySelection() {
     case SettingsBucket::System:
       currentSettings = &systemSettings;
       break;
-    case SettingsBucket::Organizer:
-      currentSettings = &organizerSettings;
+    case SettingsBucket::Planner:
+      currentSettings = &plannerSettings;
       break;
     case SettingsBucket::Display:
     case SettingsBucket::None:
@@ -232,7 +232,7 @@ void SettingsActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Right1)) {
-    // Two-level Back, the same as the organizer screens: from a setting row
+    // Two-level Back, the same as the planner screens: from a setting row
     // it first surfaces the cursor to the category tab bar (labelled Back, see
     // render()); only from the tab bar or the header does it leave (labelled
     // Home).
@@ -346,7 +346,7 @@ void SettingsActivity::loop() {
   if (swipe == MappedInputManager::SwipeDir::Up) {
     // A swipe is a page-jump, not a single step, so it always leaves the
     // header stop (if it was focused) -- same reasoning as
-    // OrganizerScreenActivity's own swipe handling.
+    // PlannerScreenActivity's own swipe handling.
     headerFocused = false;
     selectedSettingIndex = selectedSettingIndex == 0 ? 1
                                                      : ButtonNavigator::nextPageIndex(

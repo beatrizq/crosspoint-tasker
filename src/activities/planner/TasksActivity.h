@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "OrganizerScreenActivity.h"
+#include "PlannerScreenActivity.h"
 #include "TaskTabModel.h"
 
 /**
@@ -44,7 +44,7 @@
  * shared with QuickPickActivity's own scaled-down embedded rendering of this
  * same screen below the companion figure, so the two never disagree.
  */
-class TasksActivity final : public OrganizerScreenActivity {
+class TasksActivity final : public PlannerScreenActivity {
  public:
   // What a tab holds. Not a tab index: which of these are on screen depends on
   // what the filter returned, so the two are mapped through `visibleTabs`.
@@ -58,7 +58,7 @@ class TasksActivity final : public OrganizerScreenActivity {
   // so a later tab switch behaves normally.
   explicit TasksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int initialTab = 0,
                          std::string selectTaskId = "")
-      : OrganizerScreenActivity("Tasks", renderer, mappedInput, initialTab), selectTaskId(std::move(selectTaskId)) {}
+      : PlannerScreenActivity("Tasks", renderer, mappedInput, initialTab), selectTaskId(std::move(selectTaskId)) {}
 
   void onEnter() override;
 
@@ -124,7 +124,7 @@ class TasksActivity final : public OrganizerScreenActivity {
   void performTaskCompletion(int cacheIndex);
   void performTaskSync();
   // The Options menu's "Focus session" entry opens this: a duration picker,
-  // then organizerActions::beginFocusSession() for the same task.
+  // then plannerActions::beginFocusSession() for the same task.
   void offerFocusSession(int cacheIndex);
   // The Options menu's "Reschedule" entry opens this: a sub-choice between
   // picking a new date and clearing the due date entirely.

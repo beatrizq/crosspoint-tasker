@@ -1,4 +1,4 @@
-#include "OrganizerScreenActivity.h"
+#include "PlannerScreenActivity.h"
 
 #include <GfxRenderer.h>
 #include <I18n.h>
@@ -30,11 +30,11 @@ constexpr unsigned long LONG_PRESS_MS = 1000;
 constexpr int SEPARATOR_HEIGHT = 2;
 }  // namespace
 
-OrganizerScreenActivity::OrganizerScreenActivity(std::string name, GfxRenderer& renderer,
-                                                 MappedInputManager& mappedInput, const int initialTab)
+PlannerScreenActivity::PlannerScreenActivity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                             const int initialTab)
     : Activity(std::move(name), renderer, mappedInput), activeTab(initialTab) {}
 
-void OrganizerScreenActivity::onEnter() {
+void PlannerScreenActivity::onEnter() {
   Activity::onEnter();
   loadCaches();
   // Clamped here rather than trusted: initialTab arrives as a plain int from the
@@ -45,7 +45,7 @@ void OrganizerScreenActivity::onEnter() {
   requestUpdate();
 }
 
-void OrganizerScreenActivity::onExit() {
+void PlannerScreenActivity::onExit() {
   Activity::onExit();
   // Same teardown as the KOReader sync screen: drop the association, then
   // reboot silently to home so the WiFi/TLS heap fragmentation goes with it.
@@ -61,8 +61,8 @@ void OrganizerScreenActivity::onExit() {
 
 // -- metrics ----------------------------------------------------------------
 
-void OrganizerScreenActivity::dimText(const int x, const int y, const int fontId, const char* text,
-                                      const bool ink) const {
+void PlannerScreenActivity::dimText(const int x, const int y, const int fontId, const char* text,
+                                    const bool ink) const {
   if (!ink || text == nullptr || text[0] == '\0') return;
   const int width = renderer.getTextWidth(fontId, text);
   const int height = renderer.getLineHeight(fontId);
@@ -73,50 +73,50 @@ void OrganizerScreenActivity::dimText(const int x, const int y, const int fontId
   }
 }
 
-int OrganizerScreenActivity::titleFontId() const {
+int PlannerScreenActivity::titleFontId() const {
   // Small is the size these screens always drew at; Large is the only larger UI
   // font there is. The default arm also absorbs a stale persisted value from
   // when this setting had three options.
-  return SETTINGS.organizerFontSize == CrossPointSettings::ORGANIZER_FONT_SMALL ? UI_10_FONT_ID : UI_12_FONT_ID;
+  return SETTINGS.plannerFontSize == CrossPointSettings::PLANNER_FONT_SMALL ? UI_10_FONT_ID : UI_12_FONT_ID;
 }
 
-int OrganizerScreenActivity::subtitleFontId() const {
+int PlannerScreenActivity::subtitleFontId() const {
   // One step below the title, so the date stays subordinate to the event.
-  return SETTINGS.organizerFontSize == CrossPointSettings::ORGANIZER_FONT_SMALL ? SMALL_FONT_ID : UI_10_FONT_ID;
+  return SETTINGS.plannerFontSize == CrossPointSettings::PLANNER_FONT_SMALL ? SMALL_FONT_ID : UI_10_FONT_ID;
 }
 
-int OrganizerScreenActivity::rowPadding() const {
+int PlannerScreenActivity::rowPadding() const {
   // Proportional to the text: a fixed gap that suits 10pt leaves the rows
   // looking cramped once the font grows, which is the point of the setting.
   return std::max(6, renderer.getLineHeight(titleFontId()) * 2 / 5);
 }
 
-int OrganizerScreenActivity::listRowHeight() const {
+int PlannerScreenActivity::listRowHeight() const {
   const int titleH = renderer.getLineHeight(titleFontId());
   const int subH = rowsHaveSubtitle() ? renderer.getLineHeight(subtitleFontId()) : 0;
   return titleH + subH + rowPadding();
 }
 
-int OrganizerScreenActivity::listTop() const {
+int PlannerScreenActivity::listTop() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   return metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
 }
 
-int OrganizerScreenActivity::listHeight() const {
+int PlannerScreenActivity::listHeight() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   return renderer.getScreenHeight() - listTop() - metrics.buttonHintsHeight - metrics.buttonHintsGap;
 }
 
-int OrganizerScreenActivity::pageItems() const { return std::max(1, listHeight() / std::max(1, listRowHeight())); }
+int PlannerScreenActivity::pageItems() const { return std::max(1, listHeight() / std::max(1, listRowHeight())); }
 
 // -- tabs -------------------------------------------------------------------
 
-void OrganizerScreenActivity::setTab(const int index) {
+void PlannerScreenActivity::setTab(const int index) {
   if (index < 0 || index >= tabCount()) return;
   activeTab = index;
 }
 
-void OrganizerScreenActivity::switchTab(const int next) {
+void PlannerScreenActivity::switchTab(const int next) {
   if (activeTab == next || next < 0 || next >= tabCount()) return;
   activeTab = next;
   // Row indices mean different things per tab; start at the top of the new one.
@@ -128,7 +128,7 @@ void OrganizerScreenActivity::switchTab(const int next) {
 
 // -- sync -------------------------------------------------------------------
 
-void OrganizerScreenActivity::tearDownRadio() {
+void PlannerScreenActivity::tearDownRadio() {
   // Through WiFi.mode(WIFI_OFF) rather than by stopping the driver directly.
   // A bare stop leaves the Arduino layer believing the radio is still running:
   // the flag it gates esp_wifi_start() on stays set, and WiFi.mode() then sees
@@ -141,7 +141,7 @@ void OrganizerScreenActivity::tearDownRadio() {
   radioTornDown = true;
 }
 
-void OrganizerScreenActivity::failSync(const char* message) {
+void PlannerScreenActivity::failSync(const char* message) {
   {
     RenderLock lock(*this);
     state = State::FAILED;
@@ -150,7 +150,7 @@ void OrganizerScreenActivity::failSync(const char* message) {
   requestUpdate(true);
 }
 
-void OrganizerScreenActivity::runSync(std::function<void()> work) {
+void PlannerScreenActivity::runSync(std::function<void()> work) {
   {
     RenderLock lock(*this);
     state = State::SYNCING;
@@ -181,7 +181,7 @@ void OrganizerScreenActivity::runSync(std::function<void()> work) {
                          });
 }
 
-void OrganizerScreenActivity::finishSync(const char* failureMessage) {
+void PlannerScreenActivity::finishSync(const char* failureMessage) {
   {
     RenderLock lock(*this);
     if (failureMessage == nullptr) {
@@ -198,7 +198,7 @@ void OrganizerScreenActivity::finishSync(const char* failureMessage) {
 
 // -- input ------------------------------------------------------------------
 
-void OrganizerScreenActivity::loop() {
+void PlannerScreenActivity::loop() {
   if (state == State::SYNCING) return;  // ignore input while the sync blocks
 
   // A press seen here is a fresh one, so nothing is owed any more.
@@ -383,7 +383,7 @@ void OrganizerScreenActivity::loop() {
 
 // -- render -----------------------------------------------------------------
 
-void OrganizerScreenActivity::render(RenderLock&&) {
+void PlannerScreenActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -422,11 +422,11 @@ void OrganizerScreenActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, emptyMessage());
     if (tabCount() > 1) {
       renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2,
-                                tr(STR_ORGANIZER_HOLD_TO_SYNC));
+                                tr(STR_PLANNER_HOLD_TO_SYNC));
     }
   } else {
     // Drawn by the subclass rather than through GUI.drawList so the row font
-    // follows SETTINGS.organizerFontSize; the theme's list draws at a fixed
+    // follows SETTINGS.plannerFontSize; the theme's list draws at a fixed
     // size. The base owns the band, the fill and the separator; the subclass
     // owns what goes inside.
     const int rowHeight = std::max(1, listRowHeight());
@@ -477,7 +477,7 @@ void OrganizerScreenActivity::render(RenderLock&&) {
     // With the tabs focused, Select moves to the next one - so it is labelled
     // with where it goes rather than with what it is. With nowhere to go it
     // syncs, and says so.
-    confirmLabel = tabCount() > 1 ? tabLabel(nextTab()) : tr(STR_ORGANIZER_SYNC_NOW);
+    confirmLabel = tabCount() > 1 ? tabLabel(nextTab()) : tr(STR_PLANNER_SYNC_NOW);
   } else if (itemCount > 0) {
     confirmLabel = rowConfirmLabel();
   } else {

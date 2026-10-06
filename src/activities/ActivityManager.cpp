@@ -21,9 +21,9 @@
 #endif
 #include "home/MainMenuActivity.h"
 #include "home/QuickPickActivity.h"
-#include "organizer/CalendarActivity.h"
-#include "organizer/SyncAllActivity.h"
-#include "organizer/TasksActivity.h"
+#include "planner/CalendarActivity.h"
+#include "planner/SyncAllActivity.h"
+#include "planner/TasksActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
@@ -259,7 +259,7 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
   // unreachable, so this is the one place that changed rather than every one of
   // this function's 25+ callers. The main screen has no grid to preselect a tile
   // on, so initialMenuItem (still passed by several callers, e.g.
-  // OrganizerScreenActivity's own homeItem()) is simply ignored rather than
+  // PlannerScreenActivity's own homeItem()) is simply ignored rather than
   // plumbed through -- harmless, not broken.
   (void)initialMenuItem;
   replaceActivity(std::make_unique<MainMenuActivity>(renderer, mappedInput));

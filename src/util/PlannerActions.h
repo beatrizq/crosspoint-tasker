@@ -19,7 +19,7 @@ class MappedInputManager;
  * Callers are responsible for holding a RenderLock across the call, exactly
  * as they already do around TodoistTaskCache mutations made directly.
  */
-namespace organizerActions {
+namespace plannerActions {
 
 // Drops the task at `cacheIndex` and queues it for the next sync. No-op for
 // an out-of-range index.
@@ -56,4 +56,4 @@ inline constexpr int FOCUS_SESSION_DURATIONS_COUNT =
 // session" entry point offers via an OptionsMenuActivity.
 std::vector<std::string> focusSessionDurationOptions();
 
-}  // namespace organizerActions
+}  // namespace plannerActions

@@ -18,7 +18,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "OrganizerLabels.h"
+#include "PlannerLabels.h"
 #include "RescheduleTaskActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/OptionsMenuActivity.h"
@@ -26,8 +26,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/HomeAppOrder.h"
-#include "util/OrganizerActions.h"
-#include "util/OrganizerSync.h"
+#include "util/PlannerActions.h"
+#include "util/PlannerSync.h"
 #include "util/TaskWatchdog.h"
 
 void TasksActivity::loadCaches() {
@@ -37,7 +37,7 @@ void TasksActivity::loadCaches() {
 }
 
 void TasksActivity::onEnter() {
-  OrganizerScreenActivity::onEnter();
+  PlannerScreenActivity::onEnter();
   if (selectTaskId.empty()) return;
 
   const std::string targetId = std::move(selectTaskId);
@@ -134,7 +134,7 @@ void TasksActivity::drawRow(const RowLayout& layout) const {
   // list stays even, and an empty line says "no date" more quietly than a dash.
   if (task.dueDays == todoist::DUE_NONE) return;
   char when[16];
-  organizer::formatDayLabel(task.dueDays, when, sizeof(when));
+  planner::formatDayLabel(task.dueDays, when, sizeof(when));
   const auto shownWhen = renderer.truncatedText(layout.subtitleFont, when, layout.width);
   const int whenY = layout.textY + renderer.getLineHeight(layout.titleFont);
   renderer.drawText(layout.subtitleFont, layout.x, whenY, shownWhen.c_str(), layout.ink);
@@ -145,7 +145,7 @@ void TasksActivity::drawRow(const RowLayout& layout) const {
 
 void TasksActivity::formatStatus(char* out, const size_t outSize) const {
   char date[16];
-  organizer::formatDayLabel(civil::dateFromIso(TODOIST_TASKS.getSyncDate().c_str()), date, sizeof(date));
+  planner::formatDayLabel(civil::dateFromIso(TODOIST_TASKS.getSyncDate().c_str()), date, sizeof(date));
   if (TODOIST_TASKS.hasPending()) {
     char waiting[32];
     snprintf(waiting, sizeof(waiting), tr(STR_TODOIST_PENDING_COMPLETIONS),
@@ -259,7 +259,7 @@ void TasksActivity::offerFocusSession(const int cacheIndex) {
   const std::string id = TODOIST_TASKS.getTasks()[static_cast<size_t>(cacheIndex)].id;
 
   startActivityForResult(std::make_unique<OptionsMenuActivity>(renderer, mappedInput, StrId::STR_FOCUS_SESSION,
-                                                               organizerActions::focusSessionDurationOptions()),
+                                                               plannerActions::focusSessionDurationOptions()),
                          [this, text, id](const ActivityResult& result) {
                            if (mappedInput.isPressed(MappedInputManager::Button::Right2)) {
                              swallowConfirmRelease = true;
@@ -269,9 +269,9 @@ void TasksActivity::offerFocusSession(const int cacheIndex) {
                            }
                            if (result.isCancelled) return;
                            const int idx = std::get<OptionPickResult>(result.data).index;
-                           if (idx < 0 || idx >= organizerActions::FOCUS_SESSION_DURATIONS_COUNT) return;
-                           organizerActions::beginFocusSession(
-                               text, id, organizerActions::FOCUS_SESSION_DURATIONS_MINUTES[idx], renderer, mappedInput);
+                           if (idx < 0 || idx >= plannerActions::FOCUS_SESSION_DURATIONS_COUNT) return;
+                           plannerActions::beginFocusSession(
+                               text, id, plannerActions::FOCUS_SESSION_DURATIONS_MINUTES[idx], renderer, mappedInput);
                          });
 }
 
@@ -326,7 +326,7 @@ void TasksActivity::offerRescheduleDatePicker(const int cacheIndex) {
                              // the list, and a reschedule can move the task between tabs just
                              // as completing one removes it from all of them.
                              RenderLock lock(*this);
-                             organizerActions::rescheduleTask(static_cast<size_t>(cacheIndex), date->packedDate);
+                             plannerActions::rescheduleTask(static_cast<size_t>(cacheIndex), date->packedDate);
                              rebuildTabs();
                            }
                          });
@@ -340,7 +340,7 @@ void TasksActivity::clearTaskDueDate(const int cacheIndex) {
     // list, and clearing a due date can move the task between tabs just as
     // completing one removes it from all of them.
     RenderLock lock(*this);
-    organizerActions::rescheduleTask(static_cast<size_t>(cacheIndex), todoist::DUE_NONE);
+    plannerActions::rescheduleTask(static_cast<size_t>(cacheIndex), todoist::DUE_NONE);
     rebuildTabs();
   }
 }
@@ -385,7 +385,7 @@ void TasksActivity::performTaskCompletion(const int cacheIndex) {
     // The render task reads the task list; hold the lock across the removal so
     // it never paints a half-updated list.
     RenderLock lock(*this);
-    organizerActions::completeTask(static_cast<size_t>(cacheIndex));
+    plannerActions::completeTask(static_cast<size_t>(cacheIndex));
     // Completing the last task in a tab takes that tab away, so the bar is rebuilt
     // before the selection is settled. rebuildTabs() keeps the same kind selected
     // where it survives and clamps the row selection itself.
@@ -407,10 +407,10 @@ void TasksActivity::startSync() {
 }
 
 void TasksActivity::performTaskSync() {
-  // The requests and the cache update live in organizerSync so the home screen's
+  // The requests and the cache update live in plannerSync so the home screen's
   // sync-everything can drive the same sequence over one Wi-Fi association. What
   // stays here is what only this screen can do.
-  const char* failure = organizerSync::run(organizerSync::Service::Tasks);
+  const char* failure = plannerSync::run(plannerSync::Service::Tasks);
 
   // Drop the radio before repainting; the full teardown happens on the silent
   // reboot in onExit().

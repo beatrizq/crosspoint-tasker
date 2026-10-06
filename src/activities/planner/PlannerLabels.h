@@ -8,13 +8,13 @@
 /**
  * Date labels shared by the Tasks, Calendar and Budget screens.
  *
- * They lived in OrganizerActivity.cpp while those three were tabs of one
+ * They lived in PlannerActivity.cpp while those three were tabs of one
  * screen. Splitting them apart did not make the labels screen-specific: all
  * three date their header the same way on purpose, and three formats across
  * three sibling screens would read as an inconsistency rather than as a
  * distinction.
  */
-namespace organizer {
+namespace planner {
 
 // Abbreviated weekday and month names, indexed by civil::weekdayFromDate (0 =
 // Sunday) and month-1. Deliberately not translated: they are drawn in a narrow
@@ -54,4 +54,4 @@ inline void formatMonthLabel(const uint16_t date, char* out, const size_t outSiz
   snprintf(out, outSize, "%s %.4s", MONTH_NAMES[(month - 1) % 12], iso);
 }
 
-}  // namespace organizer
+}  // namespace planner

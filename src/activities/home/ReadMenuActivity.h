@@ -41,7 +41,7 @@ class ReadMenuActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   // Side Up/Down jump to the previous/next app in the home grid's own order
   // -- the same shortcut every other app screen has (see
-  // OrganizerScreenActivity/QuickPickActivity's own identical block).
+  // PlannerScreenActivity/QuickPickActivity's own identical block).
   // Row-paging (buttonNavigator's onNext/onPrevious) is still reachable via
   // front Left1/Left2, which NavNext/NavPrevious alias to alongside side
   // Up/Down -- see MappedInputManager::mapButton()'s own NavNext/NavPrevious
@@ -59,7 +59,7 @@ class ReadMenuActivity final : public Activity {
   std::vector<RecentBook> recentBooks;
   int selectedIndex = 0;
   // An extra stop bolted onto selectedIndex, the same idiom
-  // OrganizerScreenActivity's own headerFocused uses: "previous" from
+  // PlannerScreenActivity's own headerFocused uses: "previous" from
   // selectedIndex == 0 lands here instead of wrapping to the last entry,
   // "next" from here returns to selectedIndex == 0, "previous" from here
   // wraps to the last entry. Right2 here opens Sync All.

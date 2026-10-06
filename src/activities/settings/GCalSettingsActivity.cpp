@@ -321,7 +321,7 @@ void GCalSettingsActivity::render(RenderLock&&) {
             case ROW_CALENDARS:
               return std::string(tr(STR_GCAL_CALENDARS));
             default:
-              return std::string(tr(STR_ORGANIZER_HOLD_TO_SYNC));
+              return std::string(tr(STR_PLANNER_HOLD_TO_SYNC));
           }
         },
         nullptr, nullptr,
